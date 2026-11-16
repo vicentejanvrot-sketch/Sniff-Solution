@@ -54,7 +54,8 @@ const path=require('node:path');
   await page.setViewportSize({width:390,height:844});
   await page.locator('nav').getByRole('button',{name:'Brand Studio',exact:true}).click();
   await page.getByRole('heading',{name:'Your brand, in every word.',exact:true}).waitFor();
-  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'Mobile page must fit the viewport');
+  const overflow=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,elements:[...document.querySelectorAll('body *')].filter(el=>el.getBoundingClientRect().right>innerWidth+1).slice(0,8).map(el=>({tag:el.tagName,cls:el.className,width:el.getBoundingClientRect().width}))}));
+  assert.ok(overflow.scroll<=overflow.width+1,'Mobile page must fit the viewport: '+JSON.stringify(overflow));
   assert.deepEqual(errors,[]);
   console.log('Browser smoke passed: desktop and mobile navigation, brand creation, draft approval, Python check, 13 workflows, missing-key feedback, media upload/preview and disabled future modules.');
  }finally{await browser.close();await app.close();await rm(dir,{recursive:true,force:true});}
