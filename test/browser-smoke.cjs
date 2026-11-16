@@ -1,0 +1,61 @@
+// Browser QA dependency is installed in an isolated CI-only directory, not in the app.
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const {mkdtemp,rm}=require('node:fs/promises');
+const {tmpdir}=require('node:os');
+const path=require('node:path');
+
+(async()=>{
+ const {createApp}=await import('../server.mjs');
+ const dir=await mkdtemp(path.join(tmpdir(),'sniff-browser-'));
+ const app=await createApp({dir,env:{}});
+ await new Promise(resolve=>app.server.listen(0,'127.0.0.1',resolve));
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage({viewport:{width:1440,height:1000}});
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.goto('http://127.0.0.1:'+app.server.address().port);
+  await page.getByRole('heading',{name:'A little focus. A lot of possibility.'}).waitFor();
+  await page.locator('nav').getByRole('button',{name:'Brand Studio',exact:true}).click();
+  await page.getByRole('button',{name:'+ Add brand',exact:true}).click();
+  await page.getByLabel('Brand name',{exact:true}).fill('Travel One QA');
+  await page.getByLabel('Tone of voice',{exact:true}).fill('Friendly, practical, clear.');
+  await page.getByLabel('Audience',{exact:true}).fill('Travellers and business travellers.');
+  await page.getByRole('button',{name:'Save brand',exact:true}).click();
+  await page.getByRole('heading',{name:'Travel One QA',exact:true}).waitFor();
+  await page.locator('nav').getByRole('button',{name:'Drafts & Review',exact:true}).click();
+  await page.getByRole('button',{name:'+ New draft',exact:true}).click();
+  await page.getByLabel('Title',{exact:true}).fill('Plan a better trip');
+  await page.getByLabel('Content',{exact:true}).fill('Save your next trip idea with Travel One.');
+  await page.getByLabel('Review status',{exact:true}).selectOption('approved');
+  await page.getByRole('button',{name:'Save draft',exact:true}).click();
+  await page.locator('#main .pill.approved').waitFor();
+  await page.getByRole('button',{name:'Editorial tools',exact:true}).click();
+  await page.getByLabel('Check',{exact:true}).selectOption('caption');
+  await page.getByRole('button',{name:'Run on current draft',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#check-result').textContent.includes('characters'));
+  await page.locator('#modal').getByRole('button',{name:'Close',exact:true}).click();
+  await page.locator('nav').getByRole('button',{name:'Content Skills',exact:true}).click();
+  assert.equal(await page.locator('[data-skill]').count(),13);
+  await page.locator('[data-skill="ig-caption"]').click();
+  await page.getByLabel('Working title',{exact:true}).fill('Travel caption');
+  await page.getByLabel('Brief and source material',{exact:true}).fill('Promote the trip planner.');
+  await page.getByRole('button',{name:'Generate draft',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('API key'));
+  await page.locator('nav').getByRole('button',{name:'Media Library',exact:true}).click();
+  await page.locator('input[type=file]').setInputFiles({name:'reference.txt',mimeType:'text/plain',buffer:Buffer.from('Brand reference notes')});
+  await page.getByRole('button',{name:'Upload asset',exact:true}).click();
+  await page.getByRole('heading',{name:'reference.txt',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Preview',exact:true}).click();
+  await page.locator('#modal pre').filter({hasText:'Brand reference notes'}).waitFor();
+  await page.locator('#modal').getByRole('button',{name:'Close',exact:true}).click();
+  await page.locator('nav').getByRole('button',{name:'Workspace',exact:true}).click();
+  assert.equal(await page.locator('#main .pill.locked').count(),2);
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('nav').getByRole('button',{name:'Brand Studio',exact:true}).click();
+  await page.getByRole('heading',{name:'Your brand, in every word.',exact:true}).waitFor();
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'Mobile page must fit the viewport');
+  assert.deepEqual(errors,[]);
+  console.log('Browser smoke passed: desktop and mobile navigation, brand creation, draft approval, Python check, 13 workflows, missing-key feedback, media upload/preview and disabled future modules.');
+ }finally{await browser.close();await app.close();await rm(dir,{recursive:true,force:true});}
+})().catch(error=>{console.error(error);process.exitCode=1;});

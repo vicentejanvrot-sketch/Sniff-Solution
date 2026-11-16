@@ -21,10 +21,13 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
  const uploads=path.join(store.dir,'uploads');await mkdir(uploads,{recursive:true,mode:0o700});
  let working=false,closing=false;
  await store.update(s=>{for(const j of s.jobs)if(j.status==='running'){j.status='interrupted';j.error='Server stopped during this request. Check provider billing before explicitly running again.';j.finishedAt=now();}});
- async function mediaRequest(method,file,bytes){
-  const res=await fetcher(env.SUPABASE_URL+'/storage/v1/object/marketing-media/'+encodeURIComponent(env.WORKSPACE_ID||'developer')+'/'+file,{
-   method,headers:{apikey:env.SUPABASE_SECRET_KEY,...(env.SUPABASE_SECRET_KEY.startsWith('eyJ')?{Authorization:'Bearer '+env.SUPABASE_SECRET_KEY}:{}),...(bytes?{'Content-Type':file.split('.')[1]||'application/octet-stream'}:{})},
-   body:bytes,signal:AbortSignal.timeout(120000)
+ async function mediaRequest(method,file){
+  const isDelete=method==='DELETE';
+  const prefix=(env.WORKSPACE_ID||'developer')+'/'+file;
+  const target=env.SUPABASE_URL+'/storage/v1/object/marketing-media'+(isDelete?'':'/'+prefix.split('/').map(encodeURIComponent).join('/'));
+  const res=await fetcher(target,{
+   method,headers:{apikey:env.SUPABASE_SECRET_KEY,...(env.SUPABASE_SECRET_KEY.startsWith('eyJ')?{Authorization:'Bearer '+env.SUPABASE_SECRET_KEY}:{}),...(isDelete?{'Content-Type':'application/json'}:{})},
+   body:isDelete?JSON.stringify({prefixes:[prefix]}):undefined,signal:AbortSignal.timeout(120000)
   });
   if(!res.ok)throw new Error('Media storage request failed ('+res.status+').');
   return res;

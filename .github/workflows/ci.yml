@@ -23,3 +23,11 @@ jobs:
         run: npm test
       - name: Python editorial checks
         run: python3 -m unittest discover -s tools -p 'test_*.py'
+      - name: Install isolated browser QA tools
+        run: npm install --prefix /tmp/sniff-browser --no-save --ignore-scripts playwright@1.56.1
+      - name: Install browser
+        run: /tmp/sniff-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Desktop and mobile browser smoke
+        env:
+          NODE_PATH: /tmp/sniff-browser/node_modules
+        run: node test/browser-smoke.cjs

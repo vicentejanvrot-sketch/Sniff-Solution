@@ -109,3 +109,27 @@ test('restart marks running jobs interrupted without replaying billed requests',
  const app=await createApp({dir,env:{}});t.after(()=>app.close());
  assert.equal(app.store.read().jobs[0].status,'interrupted');
 });
+
+test('Supabase media uses private downloads and bucket-level prefix deletion',async t=>{
+ const requests=[];let cloudDocument;let cloudRevision=0;
+ const mock=async(url,options)=>{
+  requests.push({url,...options});
+  if(url.includes('/rest/v1/')){
+   if(options.method==='GET')return Response.json(cloudDocument?[{document:cloudDocument,revision:cloudRevision}]:[]);
+   const b=JSON.parse(options.body);cloudDocument=b.document;cloudRevision=b.revision;
+   return Response.json([{document:cloudDocument,revision:cloudRevision}]);
+  }
+  if(options.method==='GET')return new Response('private reference');
+  return Response.json({ok:true});
+ };
+ const {request,base}=await fixture(t,{env:{STORAGE_MODE:'supabase',SUPABASE_URL:'https://example.supabase.co',SUPABASE_SECRET_KEY:'sb_secret_test',WORKSPACE_ID:'developer'},fetcher:mock});
+ const b=(await request('/api/brands','POST',{name:'Cloud test'})).body;
+ const res=await fetch(base+'/api/media',{method:'POST',headers:{'X-Sniff-Client':'1','X-File-Name':'reference.txt','X-Brand-Id':b.id,'Content-Type':'text/plain'},body:'reference'});
+ assert.equal(res.status,201);const m=await res.json();
+ const download=await fetch(base+'/api/media/'+m.id,{headers:{'X-Sniff-Client':'1'}});assert.equal(await download.text(),'private reference');
+ assert.equal((await request('/api/media/'+m.id,'DELETE')).status,200);
+ const removal=requests.find(r=>r.method==='DELETE');
+ assert.equal(removal.url,'https://example.supabase.co/storage/v1/object/marketing-media');
+ assert.deepEqual(JSON.parse(removal.body),{prefixes:['developer/'+m.id]});
+ assert.ok(!JSON.stringify((await request('/api/state')).body).includes('sb_secret_test'));
+});
