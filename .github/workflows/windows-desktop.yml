@@ -34,6 +34,9 @@ jobs:
       - name: Verify installed application
         shell: pwsh
         run: ./desktop/test-installer.ps1
+      - name: Verify complete app folder and overwrite updates
+        shell: pwsh
+        run: ./desktop/test-full-app.ps1
       - name: Downloadable Windows installer
         uses: actions/upload-artifact@v4
         with:
@@ -42,3 +45,13 @@ jobs:
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
+
+      - name: Complete app ZIP for overwrite updates
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sniff-Solution-Full-App-0.1.2
+          path: build/stage/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 6

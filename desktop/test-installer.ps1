@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $root=Split-Path $PSScriptRoot -Parent
-$installer=Join-Path $root 'build\output\Sniff-Solution-Setup-0.1.1-x64.exe'
+$installer=Join-Path $root 'build\output\Sniff-Solution-Setup-0.1.2-x64.exe'
 $testRoot=Join-Path $env:RUNNER_TEMP 'Sniff installer verification'
 $installDir=Join-Path $testRoot 'Installed Application'
 $dataHome=Join-Path $testRoot 'User Data'

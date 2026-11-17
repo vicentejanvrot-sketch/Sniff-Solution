@@ -19,6 +19,7 @@ const path=require('node:path');
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto('http://127.0.0.1:'+app.server.address().port);
   await page.getByRole('heading',{name:'A little focus. A lot of possibility.'}).waitFor();
+  assert.equal(await page.locator('#app-version').textContent(),'v0.1.2');
   await page.locator('nav').getByRole('button',{name:'Brand Studio',exact:true}).click();
   await page.getByRole('button',{name:'+ Add brand',exact:true}).click();
   await page.getByLabel('Brand name',{exact:true}).fill('Travel One QA');

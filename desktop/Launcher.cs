@@ -167,6 +167,9 @@ internal sealed class DesktopContext : ApplicationContext
             {
                 string state = await client.DownloadStringTaskAsync(url + "api/state");
                 if (!state.Contains("developer-owner")) throw new Exception("Unexpected local application response.");
+                var live = serializer.Deserialize<Dictionary<string, object>>(state);
+                var package = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(root, "package.json")));
+                if (!live.ContainsKey("appVersion") || (string)live["appVersion"] != (string)package["version"]) throw new Exception("An older server is still running. Quit all Sniff tray icons, then reopen this copy.");
             }
             initialized = true;
             tray.Text = "Sniff Solution - running";
@@ -199,6 +202,8 @@ internal sealed class DesktopContext : ApplicationContext
         using (var client = Client())
         {
             var state = serializer.Deserialize<Dictionary<string, object>>(await client.DownloadStringTaskAsync(url + "api/state"));
+            string script = await client.DownloadStringTaskAsync(url + "app.js");
+            if (!script.Contains("Suggest from website")) throw new Exception("The packaged website-suggestion button is missing.");
             var skills = (System.Collections.IEnumerable)state["skills"];
             if (skills.Cast<object>().Count() != 13) throw new Exception("Packaged skill count is incorrect.");
             if (Program.SmokeMode == "--smoke-test-write")
@@ -256,3 +261,4 @@ internal sealed class DesktopContext : ApplicationContext
         base.Dispose(disposing);
     }
 }
+

@@ -2,9 +2,17 @@
 
 A single-developer AI Marketing Studio: brand profiles, thirteen Instagram content workflows, persistent drafts and editorial review, a private media library, provider jobs, usage estimates and module gates.
 
+## Complete ZIP updates (preferred)
+
+Every change is delivered as a **complete ready-to-run app ZIP**, including all current source files, the Windows launcher, Node.js and Python. Download **Sniff-Solution-Full-App-0.1.2** from the successful Windows build, quit the existing app from its tray icon, and extract all files over the existing application folder. Then run **START_SNIFF.cmd** once. It repoints the desktop/Start menu shortcuts to that exact folder and launches the new copy.
+
+The current version is shown in the app and in VERSION.txt. If updated browser files are served by an older running server, the UI asks you to quit and restart. Application files alone cannot replace code already running in memory.
+
+The ZIP never includes a real .env or user-data directory. Existing files in the target folder remain untouched unless they are application files of the same name. Desktop data/configuration remain in %LOCALAPPDATA%\SniffSolution. Existing source-checkout .env/.data files are preserved, but they are not silently imported into the desktop profile.
+
 ## Windows desktop installer
 
-The [Windows installer workflow](../../actions/workflows/windows-desktop.yml) builds a per-user setup executable with desktop and Start menu shortcuts. Download **Sniff-Solution-Windows-Installer** from a successful run's Artifacts section, extract it and run **Sniff-Solution-Setup-0.1.1-x64.exe**.
+The [Windows installer workflow](../../actions/workflows/windows-desktop.yml) builds a per-user setup executable with desktop and Start menu shortcuts. Download **Sniff-Solution-Windows-Installer** from a successful run's Artifacts section, extract it and run **Sniff-Solution-Setup-0.1.2-x64.exe**.
 
 Node.js and Python are bundled. The shortcut starts a hidden local server and opens the app in your normal browser. Its tray menu can reopen the app, edit API settings, open the data folder and quit. There is no application sign-in.
 

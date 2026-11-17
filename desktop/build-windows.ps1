@@ -7,11 +7,13 @@ $output=Join-Path $build 'output'
 $downloads=Join-Path $build 'downloads'
 if(Test-Path $stage){Remove-Item $stage -Recurse -Force}
 New-Item $stage,$output,$downloads,(Join-Path $stage 'runtime\python'),(Join-Path $stage 'desktop') -ItemType Directory -Force | Out-Null
-# Explicit allowlist: no credentials, local records or Git metadata.
-foreach($name in @('server.mjs','package.json','.env.example','README.md')){Copy-Item (Join-Path $root $name) $stage}
-foreach($name in @('lib','public','tools')){Copy-Item (Join-Path $root $name) $stage -Recurse}
-Copy-Item (Join-Path $PSScriptRoot 'server-runner.mjs') (Join-Path $stage 'desktop')
+# Complete source allowlist: excludes real .env, user records, build directories and Git metadata.
+foreach($name in @('server.mjs','package.json','.env.example','.gitignore','README.md','START_SNIFF.cmd','UPDATE_README.txt')){Copy-Item (Join-Path $root $name) $stage}
+foreach($name in @('lib','public','tools','desktop','db','test','.github')){Copy-Item (Join-Path $root $name) $stage -Recurse}
 Copy-Item (Join-Path $PSScriptRoot 'INSTALL.txt') $stage
+Get-ChildItem $stage -Directory -Recurse -Filter '__pycache__' | Remove-Item -Recurse -Force
+$version=(Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json).version
+$version | Set-Content (Join-Path $stage 'VERSION.txt') -Encoding ascii
 $node=(Get-Command node -ErrorAction Stop).Source
 $nodeVersion=(&$node --version).Trim()
 if($nodeVersion -notmatch '^v22\.'){throw 'Node 22 is required for this build.'}
@@ -48,16 +50,16 @@ if(!(Test-Path $csc)){throw '.NET C# compiler is missing.'}
 $cscArgs=@('/nologo','/target:winexe','/platform:x64','/optimize+',"/out:$(Join-Path $stage 'SniffSolution.exe')","/win32icon:$iconPath",'/reference:System.dll','/reference:System.Core.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll','/reference:System.Web.Extensions.dll',(Join-Path $PSScriptRoot 'Launcher.cs'))
 & $csc @cscArgs
 if($LASTEXITCODE -ne 0){throw 'Launcher compilation failed.'}
-$metadata=[ordered]@{application='Sniff Solution';version='0.1.1';source_commit=$env:GITHUB_SHA;node_version=$nodeVersion;node_sha256=(Get-FileHash (Join-Path $stage 'runtime\node.exe') -Algorithm SHA256).Hash.ToLowerInvariant();python_version=$pythonVersion;python_archive_sha256=$pythonHash;platform='Windows x64';code_signed=$false}
+$metadata=[ordered]@{application='Sniff Solution';version='0.1.2';source_commit=$env:GITHUB_SHA;node_version=$nodeVersion;node_sha256=(Get-FileHash (Join-Path $stage 'runtime\node.exe') -Algorithm SHA256).Hash.ToLowerInvariant();python_version=$pythonVersion;python_archive_sha256=$pythonHash;platform='Windows x64';code_signed=$false}
 $metadata | ConvertTo-Json | Set-Content (Join-Path $stage 'build-info.json') -Encoding utf8
 $iscc=Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Inno Setup 6\ISCC.exe'
 if(!(Test-Path $iscc)){throw 'Inno Setup 6 is missing.'}
-& $iscc "/DStageDir=$stage" "/DOutputDirPath=$output" '/DAppVersion=0.1.1' (Join-Path $PSScriptRoot 'installer.iss')
+& $iscc "/DStageDir=$stage" "/DOutputDirPath=$output" '/DAppVersion=0.1.2' (Join-Path $PSScriptRoot 'installer.iss')
 if($LASTEXITCODE -ne 0){throw 'Installer compilation failed.'}
-$installer=Join-Path $output 'Sniff-Solution-Setup-0.1.1-x64.exe'
+$installer=Join-Path $output 'Sniff-Solution-Setup-0.1.2-x64.exe'
 if(!(Test-Path $installer)){throw 'Installer output is missing.'}
 $hash=(Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  Sniff-Solution-Setup-0.1.1-x64.exe" | Set-Content (Join-Path $output 'SHA256SUMS.txt') -Encoding ascii
+"$hash  Sniff-Solution-Setup-0.1.2-x64.exe" | Set-Content (Join-Path $output 'SHA256SUMS.txt') -Encoding ascii
 Copy-Item (Join-Path $PSScriptRoot 'INSTALL.txt') $output
 Copy-Item (Join-Path $stage 'build-info.json') $output
 Write-Host "Installer built: $installer"
