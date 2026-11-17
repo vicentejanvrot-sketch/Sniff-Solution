@@ -9,6 +9,7 @@ import {providerStatus,generate} from './lib/providers.mjs';
 import {collectWebsite} from './lib/website.mjs';
 import {chooseResearchProvider,researchInput,researchPrompt,parseResearch} from './lib/brand-research.mjs';
 import {productionSettings,productionInput,rendererAvailable,generateImages,generateVideo,renderAsset,thumbnailAsset} from './lib/production.mjs';
+import {installedFonts,publicFonts} from './lib/fonts.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const MAX_MEDIA=100*1024*1024;
 const mediaTypes=new Set(['image/png','image/jpeg','image/webp','image/gif','application/pdf','text/plain','video/mp4','audio/mpeg','audio/wav']);
@@ -17,7 +18,7 @@ async function body(req,max=200000){
 }
 async function jsonBody(req){try{return JSON.parse((await body(req)).toString('utf8'));}catch(e){if(e.status)throw e;fail('Invalid JSON.');}}
 const json=(res,data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));};
-export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetcher=fetch,websiteReader=collectWebsite,assetDownloader,mediaRenderer=renderAsset,pollDelay}={}){
+export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetcher=fetch,websiteReader=collectWebsite,assetDownloader,mediaRenderer=renderAsset,pollDelay,fontCatalogProvider=installedFonts}={}){
  const appVersion=JSON.parse(await readFile(path.join(root,'package.json'),'utf8')).version;
  let sourceCommit='';try{const info=JSON.parse((await readFile(path.join(root,'build-info.json'),'utf8')).replace(/^\uFEFF/,''));if(/^[0-9a-f]{40}$/.test(info.source_commit||''))sourceCommit=info.source_commit;}catch(e){if(e.code!=='ENOENT'&&!(e instanceof SyntaxError))throw e;}
  const store=await new Store({dir,mode:env.STORAGE_MODE||'local',url:env.SUPABASE_URL||'',key:env.SUPABASE_SECRET_KEY||'',workspace:env.WORKSPACE_ID||'developer',fetcher}).init();
@@ -27,6 +28,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
  const thumbnailDir=path.join(store.dir,'thumbnails');await mkdir(thumbnailDir,{recursive:true,mode:0o700});
  const thumbnailJobs=new Map();let thumbnailTail=Promise.resolve();
  const renderReady=await rendererAvailable(env);
+ let fontCatalog=await fontCatalogProvider();
  let working=false,closing=false;
  await store.update(s=>{for(const j of s.jobs)if(j.status==='running'){j.status='interrupted';j.error='Server stopped during this request. Check provider billing before explicitly running again.';j.finishedAt=now();}});
  async function mediaRequest(method,file){
@@ -53,6 +55,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
   const p=work.production,ext=result.mime==='video/mp4'?'mp4':'png';
   const media={id:id(),brandId:work.brandId,name:work.title+'-'+role+'.'+ext,mime:result.mime,size:result.bytes.length,tags:'production, '+role,createdAt:now(),status:'needs-review',version:1,reviewHistory:[],jobId:work.id,sourceId,draftId:p.draftId,caption:p.caption,role,aspect:role==='rendered'?p.aspect:null,requestedAspect:p.aspect,width:result.width||null,height:result.height||null,branding:role==='rendered'&&p.branding,brandSnapshot:p.brandSnapshot};media.file=media.id;
   media.imageIndex=imageIndex;if(p.count>1)media.name=work.title+'-image-'+imageIndex+'-of-'+p.count+'-'+role+'.'+ext;
+  if(role==='rendered'&&p.branding)media.renderingFont=p.systemFontName||p.fontSnapshot?.name||p.brandSnapshot.font;
   await putMedia(media.file,result.bytes,result.mime);
   try{await store.update(s=>{s.media.unshift(media);const j=s.jobs.find(j=>j.id===work.id);(j.mediaIds||=[]).push(media.id);audit(s,'production.asset_saved',media.id);});}
   catch(e){await removeMedia(media.file).catch(()=>{});throw e;}return media;
@@ -81,7 +84,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       for(let index=0;index<results.length;index++){
        const result=results[index],source=sources[index];
        await phase('Preparing final dimensions and brand overlays');
-       const rendered=await mediaRenderer(result,p,{env,dir:store.dir,readMedia});
+       const rendered=await mediaRenderer(result,p,{env,dir:store.dir,readMedia,fontCatalog});
        await saveProductionMedia(work,rendered,{sourceId:source.id,role:'rendered',imageIndex:index+1});
       }
       await store.update(s=>{const j=s.jobs.find(j=>j.id===work.id);j.status=incomplete?'incomplete':'completed';j.phase='Assets ready for review';j.finishedAt=now();if(incomplete)j.error='Provider returned fewer images than requested. Review the saved assets and provider billing.';if(p.kind==='render'){j.costEstimate=0;j.reconciledCost=0;}audit(s,'production.completed',j.id);});continue;
@@ -110,7 +113,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    }
   }finally{working=false;}
  }
- function publicState(){const s=store.read();return {...s,skills,production:{renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!(env.HF_API_KEY_ID&&env.HF_API_KEY_SECRET),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 2 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
+ function publicState(){const s=store.read();return {...s,skills,production:{fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!(env.HF_API_KEY_ID&&env.HF_API_KEY_SECRET),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 2 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
  const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Cache-Control','no-store');
@@ -128,10 +131,11 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     if(p==='/api/state'&&req.method==='GET')return json(res,publicState());
     if(p.startsWith('/api/sniff')||p.startsWith('/api/integration'))fail('This module is not enabled in Phase 1.',403);
     if(!enabled.has('marketing'))fail('AI Marketing Studio is not enabled.',403);
+    if(p==='/api/fonts/refresh'&&req.method==='POST'){fontCatalog=await fontCatalogProvider({refresh:true});return json(res,publicFonts(fontCatalog));}
     if(p==='/api/production'&&req.method==='POST'){
      const b=await jsonBody(req);
      const job=await store.update(s=>{
-      const production=productionInput(b,s),config=productionSettings(s.settings.production);
+      const production=productionInput(b,s,fontCatalog),config=productionSettings(s.settings.production);
       if(!renderReady&&mediaRenderer===renderAsset)fail('FFmpeg is not configured. Use the complete Windows app or configure FFMPEG locally.',409);
       if(production.kind==='image'&&(!env.OPENAI_API_KEY||!config.imageModel))fail('Configure OPENAI_API_KEY locally and an image model in Settings.',409);
       if(production.kind==='video'&&(!env.HF_API_KEY_ID||!env.HF_API_KEY_SECRET))fail('Configure HF_API_KEY_ID and HF_API_KEY_SECRET in your local settings file.',409);

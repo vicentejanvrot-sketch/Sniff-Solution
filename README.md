@@ -136,3 +136,7 @@ Media Library image cards show private, lazily loaded thumbnails. Small PNG prev
 ## 0.2.2 existing-image review and formats
 
 Activity → Review assets opens that request’s saved output directly, with a selector for batches. Previews preserve actual image proportions and display decoded pixel dimensions. Studios show the selected final dimensions and explain fit (padding) versus fill (cropping). Existing-image rendering fills a default title, uses assets from the form’s selected brand and hides the AI brief, since local rendering changes framing/branding rather than scene content. The original provider output is no longer labelled with the requested final aspect ratio.
+
+## 0.2.3 installed Windows fonts
+
+Image Studio and Video Studio → Rendering font now list supported TTF, OTF and TTC font files from Windows Fonts and the current user’s installed-font folder. Friendly names come from OpenType metadata. Refresh installed fonts rescans those folders without losing the brief or other choices. Approved uploaded fonts remain available in a separate group. Matching brand fonts are selected automatically when available. The renderer reads the selected local file; no installed font files or absolute paths are sent to the browser, AI providers or app ZIP. Collections expose their first face and variable fonts use their default instance. Existing records and client assets are preserved.
