@@ -8,7 +8,7 @@ import {skills,providers,id,now,fail,str,normalizeWebsite,validateBrand,validate
 import {providerStatus,generate} from './lib/providers.mjs';
 import {collectWebsite} from './lib/website.mjs';
 import {chooseResearchProvider,researchInput,researchPrompt,parseResearch} from './lib/brand-research.mjs';
-import {productionSettings,productionInput,rendererAvailable,generateImages,generateVideo,renderAsset} from './lib/production.mjs';
+import {productionSettings,productionInput,rendererAvailable,generateImages,generateVideo,renderAsset,thumbnailAsset} from './lib/production.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const MAX_MEDIA=100*1024*1024;
 const mediaTypes=new Set(['image/png','image/jpeg','image/webp','image/gif','application/pdf','text/plain','video/mp4','audio/mpeg','audio/wav']);
@@ -24,6 +24,8 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
  const enabled=new Set((env.ENABLED_MODULES||'marketing').split(',').map(x=>x.trim()));
  const ready=providerStatus(env);
  const uploads=path.join(store.dir,'uploads');await mkdir(uploads,{recursive:true,mode:0o700});
+ const thumbnailDir=path.join(store.dir,'thumbnails');await mkdir(thumbnailDir,{recursive:true,mode:0o700});
+ const thumbnailJobs=new Map();let thumbnailTail=Promise.resolve();
  const renderReady=await rendererAvailable(env);
  let working=false,closing=false;
  await store.update(s=>{for(const j of s.jobs)if(j.status==='running'){j.status='interrupted';j.error='Server stopped during this request. Check provider billing before explicitly running again.';j.finishedAt=now();}});
@@ -261,6 +263,20 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      catch(e){await removeMedia(media.file).catch(()=>{});throw e;}
      return json(res,media,201);
     }
+    if(/^\/api\/media\/[^/]+\/thumbnail$/.test(p)&&req.method==='GET'){
+     const m=store.read().media.find(m=>m.id===p.split('/')[3]);if(!m)fail('Media not found.',404);
+     if(!['image/png','image/jpeg','image/webp','image/gif'].includes(m.mime))fail('Thumbnails are available for images only.');
+     const file=path.join(thumbnailDir,m.id+'.png');let bytes;
+     try{bytes=await readFile(file);}catch(e){
+      if(e.code!=='ENOENT')throw e;
+      if(!thumbnailJobs.has(m.id)){
+       const job=thumbnailTail.then(async()=>{if(!store.read().media.some(x=>x.id===m.id))fail('Media not found.',404);const png=await thumbnailAsset(await readMedia(m),m.mime,{env,dir:store.dir});await writeFile(file,png,{mode:0o600});return png;});
+       thumbnailJobs.set(m.id,job);thumbnailTail=job.catch(()=>{});job.finally(()=>thumbnailJobs.delete(m.id)).catch(()=>{});
+      }
+      bytes=await thumbnailJobs.get(m.id);
+     }
+     res.writeHead(200,{'Content-Type':'image/png','Content-Disposition':'inline'});res.end(bytes);return;
+    }
     if(/^\/api\/media\/[^/]+$/.test(p)){
      const m=store.read().media.find(m=>m.id===p.split('/')[3]);if(!m)fail('Media not found.',404);
      if(req.method==='PUT'){
@@ -276,6 +292,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       if(snapshot.media.some(x=>x.sourceId===m.id))fail('This asset has derived versions. Delete those versions first to preserve their source history.',409);
       // Remove the stored file first; failed metadata write remains visible and recoverable.
       await removeMedia(m.file);
+      await thumbnailJobs.get(m.id)?.catch(()=>{});await unlink(path.join(thumbnailDir,m.id+'.png')).catch(e=>{if(e.code!=='ENOENT')throw e;});
       await store.update(s=>{s.media=s.media.filter(x=>x.id!==m.id);audit(s,'media.deleted',m.id);});
       return json(res,{ok:true});
      }
@@ -286,12 +303,13 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    const staticFiles={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
    staticFiles['/production.js']=['production.js','text/javascript; charset=utf-8'];
    staticFiles['/dictation.js']=['dictation.js','text/javascript; charset=utf-8'];
+   staticFiles['/thumbnails.js']=['thumbnails.js','text/javascript; charset=utf-8'];
    const entry=staticFiles[p];if(!entry)fail('Not found.',404);
    const data=await readFile(path.join(root,'public',entry[0]));res.writeHead(200,{'Content-Type':entry[1]});res.end(req.method==='HEAD'?undefined:data);
   }catch(e){if(!res.headersSent)json(res,{error:e.status?e.message:'Operation failed. Check server configuration and storage availability.'},e.status||500);else res.end();}
  });
  server.on('close',()=>{closing=true;});
- const close=async()=>{closing=true;await new Promise(resolve=>server.listening?server.close(resolve):resolve());while(working)await new Promise(r=>setTimeout(r,25));await store.close();};
+ const close=async()=>{closing=true;await new Promise(resolve=>server.listening?server.close(resolve):resolve());while(working)await new Promise(r=>setTimeout(r,25));await thumbnailTail;await store.close();};
  return {server,store,close,pump};
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){

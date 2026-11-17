@@ -101,3 +101,13 @@ test('real FFmpeg renders PNG transparency, brand logo/text and playable MP4',as
  const mp4=await renderAsset({bytes:await readFile(video),mime:'video/mp4'},{...p,branding:true,aspect:'1:1',overlay:'Video test',logoSnapshot:{mime:'image/png'}},{env,dir,readMedia:async()=>bytes});assert.equal(mp4.mime,'video/mp4');assert.ok(mp4.bytes.includes(Buffer.from('ftyp')));assert.equal(mp4.width,1080);
  const finished=path.join(dir,'finished.mp4');await writeFile(finished,mp4.bytes);execFileSync(ffmpeg,['-loglevel','error','-i',finished,'-f','null','-'],{windowsHide:true});
 });
+test('private image thumbnails are bounded, reusable and removed with the asset',async t=>{
+ const env={FFMPEG:process.env.FFMPEG||'ffmpeg'};if(!await rendererAvailable(env)){t.skip('FFmpeg is needed for thumbnail verification.');return;}
+ const f=await fixture(t,{env});
+ const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAABAAAAAQBPJcTWAAAAIUlEQVR4nGP8y0AaYCFRPcOoBmIAC1GqkMCoBmIAyaEEAGgAATusqEGCAAAAAElFTkSuQmCC','base64');
+ const upload=await fetch(f.base+'/api/media',{method:'POST',headers:{'X-Sniff-Client':'1','Content-Type':'image/png','X-File-Name':'thumbnail.png','X-Brand-Id':'brand'},body:bytes});assert.equal(upload.status,201);const m=await upload.json();
+ const route='/api/media/'+m.id+'/thumbnail';assert.equal((await fetch(f.base+route)).status,403);
+ const thumb=await fetch(f.base+route,{headers:{'X-Sniff-Client':'1'}});assert.equal(thumb.status,200);assert.equal(thumb.headers.get('content-type'),'image/png');const image=Buffer.from(await thumb.arrayBuffer());assert.ok(image.readUInt32BE(16)<=360);assert.ok(image.readUInt32BE(20)<=240);
+ const cached=await fetch(f.base+route,{headers:{'X-Sniff-Client':'1'}});assert.deepEqual(Buffer.from(await cached.arrayBuffer()),image);
+ assert.equal((await f.request('/api/media/'+m.id,'DELETE')).status,200);assert.equal((await f.request(route)).status,404);await assert.rejects(readFile(path.join(f.dir,'thumbnails',m.id+'.png')),/ENOENT/);
+});

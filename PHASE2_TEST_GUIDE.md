@@ -58,3 +58,7 @@ API references: https://developers.openai.com/api/docs/guides/image-generation ;
 In Image Studio or Video Studio, select Dictate next to Creative brief or Caption / production notes. Allow microphone access, speak in your browser language, then select Stop dictation. Final recognized text appends to existing text. Review it before starting production. Dictation uses the browser speech service, which may process audio online; browser support and microphone permission are required. Unsupported browsers show a Windows Win+H voice-typing fallback. Automated browser tests simulate speech results and permission failures; real microphone accuracy needs user acceptance testing.
 
 The budget panel shows count × per-image reservation, remaining monthly budget and instructions before submission. If blocked, reduce the count, review Settings & Costs or reconcile previous requests in Activity. A blocked request makes no provider call. Your budget and reservation settings are preserved.
+
+## Media Library thumbnails
+
+Open Media Library and scroll through image cards. Each image should display a small thumbnail without clicking Preview. Transparent PNGs use a checkerboard background. Search, switch brands and toggle Show saved originals; the thumbnails should follow the visible cards. Preview and Download remain available. Thumbnail creation runs locally through bundled FFmpeg and never generates another AI image. Videos/documents keep their type icons.

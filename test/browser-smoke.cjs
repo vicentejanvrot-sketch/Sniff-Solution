@@ -64,9 +64,10 @@ const path=require('node:path');
   await page.locator('#modal pre').filter({hasText:'Brand reference notes'}).waitFor();
   await page.locator('#modal').getByRole('button',{name:'Close',exact:true}).click();
   // Both studios are independent of text workflows; rendering uses existing media and no AI key.
-  await page.locator('input[type=file]').setInputFiles({name:'approved-logo.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg==','base64')});
+  await page.locator('input[type=file]').setInputFiles({name:'approved-logo.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAABAAAAAQBPJcTWAAAAIUlEQVR4nGP8y0AaYCFRPcOoBmIAC1GqkMCoBmIAyaEEAGgAATusqEGCAAAAAElFTkSuQmCC','base64')});
   await page.getByRole('button',{name:'Upload asset',exact:true}).click();
   await page.getByRole('heading',{name:'approved-logo.png',exact:true}).waitFor();
+  await page.waitForFunction(()=>[...document.querySelectorAll('[data-thumbnail]')].some(img=>img.complete&&img.naturalWidth>0&&!img.hidden));
   await page.locator('.card').filter({has:page.getByRole('heading',{name:'approved-logo.png',exact:true})}).getByRole('button',{name:'Preview',exact:true}).click();
   await page.getByLabel('Review status',{exact:true}).selectOption('approved');
   await page.getByRole('button',{name:'Save review',exact:true}).click();

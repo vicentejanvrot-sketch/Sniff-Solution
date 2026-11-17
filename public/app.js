@@ -1,5 +1,6 @@
 import {mountStudio,visibleMedia} from './production.js';
 import {stopDictation} from './dictation.js';
+import {clearThumbnails,thumbnailHTML,loadThumbnails} from './thumbnails.js';
 const app=document.querySelector('#app'),modal=document.querySelector('#modal');
 let state,page='dashboard',activeBrand=localStorage.getItem('sniff-brand')||'',activeSkill='',activeDraft='',toastTimer;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -29,6 +30,7 @@ function render(){
 }
 function renderPage(){
  stopDictation();
+ clearThumbnails();
  const main=document.querySelector('#main');
  if(page==='dashboard')dashboard(main);
  if(page==='brands')brands(main);
@@ -261,7 +263,8 @@ function media(el){
  const items=filtered(state.media);
  el.innerHTML=heading('A home for your brand assets.','Keep reference images, logos, documents, video and audio with the right brand.')+
  '<form id="upload-form" class="card"><div class="form-grid"><label>Brand<select name="brandId" aria-label="Brand" required>'+brandOptions()+'</select></label><label>Tags<input name="tags" placeholder="logo, reference, campaign" maxlength="500"></label><label>File · up to 100 MB<input class="file-input" type="file" name="file" required accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.mp4,.mp3,.wav,.ttf,.otf"></label><div class="actions"><button class="primary" type="submit">Upload asset</button></div></div><p class="hint">Assets are stored for reference and reuse. AI text workflows currently use the brief you supply; they do not automatically read uploaded files.</p></form><div class="section-title"><h2>Brand assets · <span id="media-visible-count"></span></h2><input id="media-search" class="search" aria-label="Search media" placeholder="Search names or tags"></div><label class="check-label"><input type="checkbox" id="show-media-originals"> Show saved originals</label><p class="hint">Final outputs are shown by default. Each original is a recovery copy from the same AI generation; it is not an additional generation.</p><div id="media-grid" class="grid"></div>';
- function draw(query=''){const list=visibleMedia(items,document.querySelector('#show-media-originals').checked).filter(m=>(m.name+' '+m.tags).toLowerCase().includes(query.toLowerCase()));document.querySelector('#media-visible-count').textContent=list.length;document.querySelector('#media-grid').innerHTML=list.length?list.map(m=>'<div class="card"><div class="media-symbol" aria-hidden="true">'+(m.mime.startsWith('image/')?'▧':m.mime.startsWith('video/')?'▷':'▤')+'</div><h3>'+esc(m.name)+'</h3><p>'+esc((m.role==='generated'?'Saved original · ':m.role==='rendered'?'Final output · ':'')+(m.status||'needs-review')+' · '+(m.tags||'No tags'))+'</p><small>'+(m.size/1024/1024).toFixed(2)+' MB · '+esc(m.mime)+'</small><div class="actions"><button data-preview="'+m.id+'">Preview</button><button data-download="'+m.id+'">Download</button><button data-delete-media="'+m.id+'" class="danger">Delete</button></div></div>').join(''):empty('No matching assets','Upload your first brand asset or change the search.');
+ function draw(query=''){const list=visibleMedia(items,document.querySelector('#show-media-originals').checked).filter(m=>(m.name+' '+m.tags).toLowerCase().includes(query.toLowerCase()));document.querySelector('#media-visible-count').textContent=list.length;document.querySelector('#media-grid').innerHTML=list.length?list.map(m=>'<div class="card">'+thumbnailHTML(m,esc)+'<h3>'+esc(m.name)+'</h3><p>'+esc((m.role==='generated'?'Saved original · ':m.role==='rendered'?'Final output · ':'')+(m.status||'needs-review')+' · '+(m.tags||'No tags'))+'</p><small>'+(m.size/1024/1024).toFixed(2)+' MB · '+esc(m.mime)+'</small><div class="actions"><button data-preview="'+m.id+'">Preview</button><button data-download="'+m.id+'">Download</button><button data-delete-media="'+m.id+'" class="danger">Delete</button></div></div>').join(''):empty('No matching assets','Upload your first brand asset or change the search.');
+ loadThumbnails(document.querySelector('#media-grid'),api);
  document.querySelectorAll('[data-download]').forEach(b=>b.onclick=async()=>{try{const m=items.find(x=>x.id===b.dataset.download);download(await api('/api/media/'+m.id),m.name);}catch(e){toast(e.message,true);}});
  document.querySelectorAll('[data-preview]').forEach(b=>b.onclick=()=>previewMedia(items.find(x=>x.id===b.dataset.preview)));
  document.querySelectorAll('[data-delete-media]').forEach(b=>b.onclick=async()=>{if(!confirm('Permanently delete this asset?'))return;try{await api('/api/media/'+b.dataset.deleteMedia,{method:'DELETE'});await refresh();renderPage();toast('Asset deleted.');}catch(e){toast(e.message,true);}});
