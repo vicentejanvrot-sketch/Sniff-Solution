@@ -4,7 +4,7 @@ A single-developer AI Marketing Studio: brand profiles, thirteen Instagram conte
 
 ## Windows desktop installer
 
-The [Windows installer workflow](../../actions/workflows/windows-desktop.yml) builds a per-user setup executable with desktop and Start menu shortcuts. Download **Sniff-Solution-Windows-Installer** from a successful run's Artifacts section, extract it and run **Sniff-Solution-Setup-0.1.0-x64.exe**.
+The [Windows installer workflow](../../actions/workflows/windows-desktop.yml) builds a per-user setup executable with desktop and Start menu shortcuts. Download **Sniff-Solution-Windows-Installer** from a successful run's Artifacts section, extract it and run **Sniff-Solution-Setup-0.1.1-x64.exe**.
 
 Node.js and Python are bundled. The shortcut starts a hidden local server and opens the app in your normal browser. Its tray menu can reopen the app, edit API settings, open the data folder and quit. There is no application sign-in.
 
@@ -23,6 +23,20 @@ Install **Node.js 22 or newer** and **Python 3** (Python enables the six editori
 No package installation or application sign-in is needed. It binds only to the loopback interface and rejects foreign Host/Origin requests. This is a local owner workspace, not a public SaaS deployment. Do not publish it behind a proxy or expose the port. Commercial identity, tenant isolation, subscription billing and multiple-user roles are not enabled yet.
 
 On Windows, if Python is available as `python` instead of `python3`, add `PYTHON=python` to your .env file.
+
+## Suggest a brand from its website
+
+In **Brand Studio → Add brand**, enter the **brand name** and **website**, then choose **Suggest from website**. Bare domains and www addresses are normalized to HTTPS. Automatic provider selection prefers Perplexity, then OpenAI, then Claude, using providers with both a configured key and model. You can also select a provider explicitly.
+
+The app reads the public homepage, up to two same-site feature/about pages and up to four stylesheets. It extracts colour and font-family candidates from accessible HTML/CSS, then asks the selected AI for tone, audience, goals, source-backed claims and proposed phrases to avoid. It does not render JavaScript pages or measure computed styles. Unused stylesheet rules, fallback fonts, blocked pages and client-rendered sites can limit the results.
+
+Only empty fields (and the default Arial value on a new brand) are filled automatically. Existing text and edits made while analysis runs are preserved. Each field has **View suggestion** and **Use this suggestion** controls. **Use all suggestions** asks before replacing existing values. You can edit everything before **Save brand**; analysis alone never creates or updates a brand.
+
+The evidence panel shows captured pages/styles, observed CSS declarations, assumptions and timestamps. Claim excerpts must match captured page text; unsupported proposed claims are omitted. A matching quote supports provenance, not a factual or legal endorsement. Suggested prohibited phrases are recommendations, not discovered company policies.
+
+Website analysis uses the same job queue, module gates, reservations and cost tracking as other AI tasks. It is visible in **Activity**, where completed results can be reopened. A website failure before the AI request makes no paid call and releases that reservation. Closing the dialog does not cancel a request that is already running. The save button waits while analysis is active; closing the dialog remains available.
+
+Outbound website reads use public DNS checks and pinned addresses, reject local/private targets and nonstandard ports, revalidate every redirect, limit response/decompression sizes and use no browser cookies or provider credentials.
 
 ## First use
 
@@ -91,3 +105,4 @@ The repository does not contain a hosted deployment. The local developer app is 
 - [Anthropic Messages](https://docs.anthropic.com/en/api/messages)
 - [Perplexity Sonar and migration reference](https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/how-to)
 - [Supabase data security](https://supabase.com/docs/guides/database/secure-data)
+

@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.1.1"
 #endif
 #ifndef StageDir
   #define StageDir "..\build\stage"
@@ -43,3 +43,4 @@ Filename: "{app}\SniffSolution.exe"; Description: "Open Sniff Solution"; Flags: 
 
 ; Data and .env are in the user's LocalAppData\SniffSolution folder.
 ; They are deliberately outside {app} and are never deleted by this installer.
+

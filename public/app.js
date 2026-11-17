@@ -4,7 +4,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const money=v=>v==null?'Unpriced':'US$'+Number(v).toFixed(4);
 const date=v=>new Date(v).toLocaleString();
 const selectedBrand=()=>state.brands.find(b=>b.id===activeBrand);
-const filtered=items=>items.filter(x=>!activeBrand||x.brandId===activeBrand);
+const filtered=items=>items.filter(x=>!activeBrand||x.brandId===activeBrand||(x.type==='brand-research'&&!x.brandId));
 const pill=status=>'<span class="pill '+esc(status)+'">'+esc(status.replaceAll('-',' '))+'</span>';
 function toast(message,error=false){const el=document.querySelector('#toast');clearTimeout(toastTimer);el.textContent=message;el.className=error?'error':'';el.style.display='block';toastTimer=setTimeout(()=>el.style.display='none',6500);}
 async function api(url,options={}){
@@ -54,12 +54,74 @@ function brands(el){
  document.querySelectorAll('[data-edit-brand]').forEach(b=>b.onclick=()=>brandDialog(state.brands.find(x=>x.id===b.dataset.editBrand)));
  document.querySelectorAll('[data-use-brand]').forEach(b=>b.onclick=()=>{activeBrand=b.dataset.useBrand;localStorage.setItem('sniff-brand',activeBrand);navigate('skills');});
 }
-function brandDialog(brand={}){
+let brandDialogSequence=0;
+function brandDialog(brand={},completedResearch=null){
+ const session=++brandDialogSequence;
+ let closed=false,researchJobId=brand.research?.jobId||'',lastResult=null;
  const fields=[['name','Brand name',true],['website','Website'],['palette','Brand colours · #RRGGBB, comma separated'],['font','Font'],['voice','Tone of voice'],['audience','Audience'],['goals','Marketing goals'],['allowedClaims','Allowed claims and supporting facts'],['forbiddenClaims','Prohibited claims · one phrase per line']];
- modal.innerHTML='<div class="dialog-header"><h2>'+esc(brand.id?'Edit brand':'Create a brand')+'</h2><button id="close-modal" aria-label="Close dialog">×</button></div><form id="brand-form"><div class="form-grid">'+fields.map(([key,label,required],i)=>'<label class="'+(i>3?'full':'')+'">'+label+(i>3?'<textarea name="'+key+'">'+esc(brand[key]||'')+'</textarea>':'<input name="'+key+'" value="'+esc(brand[key]||(key==='font'?'Arial':''))+'" '+(required?'required':'')+'>')+'</label>').join('')+'</div><p class="hint">AI uses these rules as direction. A person should review factual claims before using the content.</p><div class="actions"><button class="primary" type="submit">Save brand</button>'+(brand.id?'<button class="danger" type="button" id="delete-brand">Delete brand</button>':'')+'</div></form>';
- modal.showModal();document.querySelector('#close-modal').onclick=()=>modal.close();
- document.querySelector('#brand-form').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const result=await send('/api/brands','POST',{...Object.fromEntries(new FormData(e.target)),id:brand.id,version:brand.version});activeBrand=result.id;localStorage.setItem('sniff-brand',activeBrand);await refresh();modal.close();render();toast('Brand saved.');}catch(err){toast(err.message,true);}finally{b.disabled=false;}};
- if(brand.id)document.querySelector('#delete-brand').onclick=async()=>{if(!confirm('Delete this brand? This cannot be undone. Brands with content or job history must be kept.'))return;try{await api('/api/brands/'+brand.id,{method:'DELETE'});await refresh();modal.close();render();toast('Brand deleted.');}catch(e){toast(e.message,true);}};
+ const providerOptions='<option value="">Automatic · prefer Perplexity</option>'+['perplexity','openai','anthropic'].map(p=>'<option value="'+p+'">'+({perplexity:'Perplexity',openai:'OpenAI',anthropic:'Claude'}[p])+(state.providerStatus[p]?'':' · key needed')+'</option>').join('');
+ const action='<div class="full brand-research-action"><div><strong>Start with the name and website</strong><p class="hint">Read public website pages and styles, then prepare editable brand suggestions. Nothing is saved until you choose Save brand.</p></div><div class="actions"><label>Research provider<select id="brand-research-provider" aria-label="Research provider">'+providerOptions+'</select></label><button id="suggest-brand" type="button">✦ Suggest from website</button></div><p id="brand-research-status" class="hint" role="status" aria-live="polite"></p></div>';
+ modal.innerHTML='<div class="dialog-header"><h2>'+esc(brand.id?'Edit brand':'Create a brand')+'</h2><button id="close-modal" aria-label="Close dialog">×</button></div><form id="brand-form"><div class="form-grid">'+fields.map(([key,label,required],i)=>'<div class="'+(i>3?'full':'')+'"><label for="brand-'+key+'">'+label+'</label>'+(i>3?'<textarea id="brand-'+key+'" name="'+key+'">'+esc(brand[key]||'')+'</textarea>':'<input id="brand-'+key+'" name="'+key+'" value="'+esc(brand[key]||(key==='font'?'Arial':''))+'" '+(required?'required':'')+' maxlength="'+(key==='website'?500:key==='name'?120:key==='font'?100:200)+'">')+'<div data-field-suggestion="'+key+'"></div></div>'+(i===1?action:'')).join('')+'</div><section id="brand-research-evidence" class="note" hidden></section><p class="hint">Colours and fonts are candidates observed in accessible HTML/CSS, not verified brand guidelines. Tone, audience, goals and prohibited phrases are recommendations. Review factual claims and all suggestions before saving.</p><div class="actions"><button class="primary" type="submit">Save brand</button>'+(brand.id?'<button class="danger" type="button" id="delete-brand">Delete brand</button>':'')+'</div></form>';
+ const form=modal.querySelector('#brand-form'),button=modal.querySelector('#suggest-brand'),status=modal.querySelector('#brand-research-status'),evidence=modal.querySelector('#brand-research-evidence');
+ const isCurrent=()=>!closed&&modal.open&&session===brandDialogSequence;
+ function applyResult(job,baseline={}){
+  if(!isCurrent())return;
+  lastResult=job.result;researchJobId=job.id;
+  const identityUnchanged=form.elements.name.value.trim()===job.brandInput.name&&normalizeInput(form.elements.website.value)===normalizeInput(job.website);
+  let applied=0;
+  for(const key of ['palette','font','voice','audience','goals','allowedClaims','forbiddenClaims']){
+   const value=lastResult.suggestions[key];if(!value)continue;
+   const input=form.elements[key],holder=form.querySelector('[data-field-suggestion="'+key+'"]');
+   const unchanged=input.value===(baseline[key]??input.value);
+   const emptyAtStart=!baseline[key]||(key==='font'&&!brand.id&&baseline[key]==='Arial');
+   const autoApply=identityUnchanged&&unchanged&&emptyAtStart;
+   if(autoApply){input.value=value;applied++;}
+   holder.innerHTML='<div class="brand-field-suggestion"><small>'+esc(lastResult.fieldOrigins[key])+'</small><details><summary>View suggestion</summary><pre>'+esc(value)+'</pre></details><button type="button">Use this suggestion</button></div>';
+   holder.querySelector('button').onclick=()=>{input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));toast('Suggestion applied. You can edit it before saving.');};
+  }
+  const sources=lastResult.sources.filter(s=>/^https?:\/\//.test(s.url));
+  evidence.hidden=false;
+  evidence.innerHTML='<strong>Suggestions ready · review before saving</strong><p>'+applied+' empty/default fields filled. Existing text and edits made during analysis are kept. '+(!identityUnchanged?'The name or website has changed since this analysis; suggestions were not filled automatically. ':'')+'</p><button id="apply-all-brand-suggestions" type="button">Use all suggestions</button><details><summary>Website evidence and detected styling</summary><p>Read '+esc(date(lastResult.capturedAt))+' · <a target="_blank" rel="noopener noreferrer" href="'+esc(lastResult.finalUrl)+'">'+esc(lastResult.finalUrl)+'</a></p><ul>'+lastResult.styling.colors.map(x=>'<li><strong>'+esc(x.value)+'</strong> — '+esc(x.context)+' · '+esc(x.source)+'</li>').join('')+lastResult.styling.fonts.map(x=>'<li><strong>'+esc(x.value)+'</strong> — '+esc(x.context)+' · '+esc(x.source)+'</li>').join('')+'</ul><p class="hint">CSS can include unused styles and fallback fonts. These candidates have not been measured from a rendered page.</p>'+sources.map(s=>'<p><a href="'+esc(s.url)+'" target="_blank" rel="noopener noreferrer">'+esc(s.kind)+': '+esc(s.url)+'</a></p>').join('')+'</details>'+(lastResult.notes.length?'<details><summary>Assumptions and limitations</summary><ul>'+lastResult.notes.map(n=>'<li>'+esc(n)+'</li>').join('')+'</ul></details>':'');
+  evidence.querySelector('#apply-all-brand-suggestions').onclick=()=>{
+   const entries=Object.entries(lastResult.suggestions).filter(([key,value])=>value&&form.elements[key]);
+   if(entries.some(([key,value])=>form.elements[key].value&&form.elements[key].value!==value)&&!confirm('Replace the existing field values with these suggestions? You can still edit everything before saving.'))return;
+   entries.forEach(([key,value])=>{form.elements[key].value=value;});
+   status.textContent='Suggestions applied. Review or edit the fields, then choose Save brand.';
+  };
+  status.textContent='Suggestions are ready. Review or edit the fields, then choose Save brand.';
+ }
+ function normalizeInput(value){try{const u=new URL(/^[a-z][a-z\d+.-]*:/i.test(value.trim())?value.trim():'https://'+value.trim());u.hash='';return u.href;}catch{return value.trim();}}
+ button.onclick=async()=>{
+  const name=form.elements.name.value.trim(),website=form.elements.website.value.trim();
+  if(!name||!website){toast('Enter the brand name and website first.',true);return;}
+  const baseline=Object.fromEntries(fields.map(([key])=>[key,form.elements[key].value]));
+  button.disabled=true;form.querySelector('[type=submit]').disabled=true;status.textContent='Queuing website analysis…';
+  try{
+   const start=await send('/api/brand-research','POST',{name,website,provider:modal.querySelector('#brand-research-provider').value,brandId:brand.id});
+   if(!isCurrent())return;
+   form.elements.website.value=start.website;
+   while(isCurrent()){
+    const job=await api('/api/brand-research/'+start.id);
+    if(!isCurrent())return;
+    status.textContent=(job.phase||job.status)+' · '+Math.floor((Date.now()-new Date(job.createdAt))/1000)+'s';
+    if(job.status==='completed'){applyResult(job,baseline);await refresh();return;}
+    if(['failed','interrupted','incomplete'].includes(job.status))throw new Error(job.error||'Website analysis needs attention.');
+    await new Promise(resolve=>setTimeout(resolve,1200));
+   }
+  }catch(err){if(isCurrent()){status.textContent=err.message;toast(err.message,true);}}
+  finally{button.disabled=false;form.querySelector('[type=submit]').disabled=false;}
+ };
+ modal.onclose=()=>{closed=true;};
+ modal.showModal();modal.querySelector('#close-modal').onclick=()=>modal.close();
+ form.onsubmit=async e=>{
+  e.preventDefault();const b=e.submitter;b.disabled=true;
+  try{
+   const result=await send('/api/brands','POST',{...Object.fromEntries(new FormData(form)),id:brand.id,version:brand.version,researchJobId:researchJobId||undefined});
+   activeBrand=result.id;localStorage.setItem('sniff-brand',activeBrand);await refresh();modal.close();render();toast('Brand saved.');
+  }catch(err){toast(err.message,true);}finally{b.disabled=false;}
+ };
+ if(brand.id)modal.querySelector('#delete-brand').onclick=async()=>{if(!confirm('Delete this brand? This cannot be undone. Brands with content or job history must be kept.'))return;try{await api('/api/brands/'+brand.id,{method:'DELETE'});await refresh();modal.close();render();toast('Brand deleted.');}catch(e){toast(e.message,true);}};
+ if(completedResearch)applyResult(completedResearch,Object.fromEntries(fields.map(([key])=>[key,form.elements[key].value])));
 }
 function skillList(el){
  el.innerHTML=heading('A skill for every next step.','Focused workflows for the content you need to make.')+'<div class="note">Phase 1 creates written plans and drafts. Messages are not sent and posts are not published.</div><div class="grid">'+state.skills.map((s,i)=>'<div class="card skill-card"><div class="top"><span class="card-icon">'+String(i+1).padStart(2,'0')+'</span><span class="code-label">/'+s.id+'</span></div><h3>'+esc(s.name)+'</h3><p>'+esc(s.description)+'</p><div class="actions"><button data-skill="'+s.id+'">Start workflow ↗</button></div></div>').join('')+'</div>';
@@ -115,9 +177,9 @@ function media(el){
 function jobs(el){
  const items=filtered(state.jobs).slice().reverse();
  el.innerHTML=heading('Keep the work moving.','Track requests, inspect errors and open completed drafts.')+
- (items.length?'<div class="table-wrap"><table><thead><tr><th>Content</th><th>Provider</th><th>Status</th><th>Cost</th><th>Action</th></tr></thead><tbody>'+items.map(j=>'<tr><td><strong>'+esc(j.title)+'</strong><small>'+esc(date(j.createdAt))+'</small><small>'+esc(j.skill)+'</small></td><td>'+esc(j.provider)+'<small>'+esc(j.config.model)+'</small></td><td>'+pill(j.status)+(j.error?'<small>'+esc(j.error)+'</small>':'')+(['running','queued'].includes(j.status)?'<small>'+Math.floor((Date.now()-new Date(j.createdAt))/1000)+'s since queued</small>':'')+'</td><td>'+money(j.reconciledCost??j.costEstimate)+'<small>Reservation: '+money(j.reservation)+'</small>'+(j.tokens?'<small>'+j.tokens.input+' input / '+j.tokens.output+' output tokens</small>':'')+'</td><td>'+(j.draftId&&state.drafts.some(d=>d.id===j.draftId)?'<button data-draft="'+j.draftId+'">Open draft</button>':'')+(!['running','queued'].includes(j.status)?'<button data-reconcile="'+j.id+'">Reconcile cost</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':empty('Nothing in the queue yet','Start a content skill to create your first request.'))+
+ (items.length?'<div class="table-wrap"><table><thead><tr><th>Content</th><th>Provider</th><th>Status</th><th>Cost</th><th>Action</th></tr></thead><tbody>'+items.map(j=>'<tr><td><strong>'+esc(j.title)+'</strong><small>'+esc(date(j.createdAt))+'</small><small>'+esc(j.skill)+'</small></td><td>'+esc(j.provider)+'<small>'+esc(j.config.model)+'</small></td><td>'+pill(j.status)+(j.error?'<small>'+esc(j.error)+'</small>':'')+(j.type==='brand-research'&&j.phase?'<small>'+esc(j.phase)+'</small>':'')+(['running','queued'].includes(j.status)?'<small>'+Math.floor((Date.now()-new Date(j.createdAt))/1000)+'s since queued</small>':'')+'</td><td>'+money(j.reconciledCost??j.costEstimate)+'<small>Reservation: '+money(j.reservation)+'</small>'+(j.tokens?'<small>'+j.tokens.input+' input / '+j.tokens.output+' output tokens</small>':'')+'</td><td>'+(j.type==='brand-research'&&j.result?'<button data-brand-research="'+j.id+'">Review suggestions</button>':'')+(j.draftId&&state.drafts.some(d=>d.id===j.draftId)?'<button data-draft="'+j.draftId+'">Open draft</button>':'')+(!['running','queued'].includes(j.status)?'<button data-reconcile="'+j.id+'">Reconcile cost</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':empty('Nothing in the queue yet','Start a content skill to create your first request.'))+
  '<div class="note">Jobs run one at a time while this application server is open. Interrupted provider calls are never automatically retried. Check the provider’s usage before running again.</div>';
- bindDraftLinks();document.querySelectorAll('[data-reconcile]').forEach(b=>b.onclick=async()=>{const value=prompt('Confirmed cost from the provider’s billing records, in USD:');if(value===null||value.trim()==='')return;try{await send('/api/jobs/'+b.dataset.reconcile+'/reconcile','POST',{cost:Number(value)});await refresh();renderPage();toast('Cost reconciled.');}catch(e){toast(e.message,true);}});
+ bindDraftLinks();document.querySelectorAll('[data-brand-research]').forEach(b=>b.onclick=()=>{const job=state.jobs.find(j=>j.id===b.dataset.brandResearch);brandDialog(state.brands.find(x=>x.id===job.brandId)||job.brandInput,job);});document.querySelectorAll('[data-reconcile]').forEach(b=>b.onclick=async()=>{const value=prompt('Confirmed cost from the provider’s billing records, in USD:');if(value===null||value.trim()==='')return;try{await send('/api/jobs/'+b.dataset.reconcile+'/reconcile','POST',{cost:Number(value)});await refresh();renderPage();toast('Cost reconciled.');}catch(e){toast(e.message,true);}});
 }
 function settings(el){
  const settings=state.settings;
@@ -136,4 +198,5 @@ async function init(){
  try{await refresh();render();}catch(e){app.innerHTML='<div class="card connection-error"><h1>Workspace unavailable</h1><p>'+esc(e.message)+'</p><button id="retry">Try again</button></div>';document.querySelector('#retry').onclick=init;}
 }
 await init();
-setInterval(async()=>{if(!state||document.hidden)return;try{const before=new Map(state.jobs.map(j=>[j.id,j.status]));await refresh();for(const j of state.jobs)if(before.has(j.id)&&before.get(j.id)!==j.status&&['completed','failed','interrupted','incomplete'].includes(j.status))toast(j.status==='completed'?'Draft ready: '+j.title:'Request needs attention: '+j.title,j.status!=='completed');const badge=document.querySelector('#job-count');if(badge)badge.textContent=state.jobs.filter(j=>['queued','running'].includes(j.status)).length;if(['dashboard','jobs'].includes(page)&&!modal.open)renderPage();}catch{}},2500);
+setInterval(async()=>{if(!state||document.hidden)return;try{const before=new Map(state.jobs.map(j=>[j.id,j.status]));await refresh();for(const j of state.jobs)if(before.has(j.id)&&before.get(j.id)!==j.status&&['completed','failed','interrupted','incomplete'].includes(j.status))toast(j.status==='completed'?(j.type==='brand-research'?'Brand suggestions ready: ':'Draft ready: ')+j.title:'Request needs attention: '+j.title,j.status!=='completed');const badge=document.querySelector('#job-count');if(badge)badge.textContent=state.jobs.filter(j=>['queued','running'].includes(j.status)).length;if(['dashboard','jobs'].includes(page)&&!modal.open)renderPage();}catch{}},2500);
+

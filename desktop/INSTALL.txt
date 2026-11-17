@@ -1,9 +1,9 @@
 SNIFF SOLUTION - WINDOWS DESKTOP INSTALLER
-Version 0.1.0 - Windows 10/11 x64
+Version 0.1.1 - Windows 10/11 x64
 
 INSTALL
 1. Extract this downloaded ZIP.
-2. Double-click Sniff-Solution-Setup-0.1.0-x64.exe.
+2. Double-click Sniff-Solution-Setup-0.1.1-x64.exe.
 3. Follow the installer. It creates desktop and Start menu shortcuts.
 4. Double-click "Sniff Solution" on your desktop.
 
@@ -18,6 +18,11 @@ Enter your provider API keys in the .env file, save it, then quit and reopen
 Sniff Solution. Set your model IDs in the app's Settings & Costs screen.
 Keys are not included in this installer. Manual drafts and local storage work
 without API keys; AI calls and cloud storage need your own configured keys.
+
+BRAND SUGGESTIONS
+In Brand Studio, enter the brand name and website, then click
+Suggest from website. Configure a provider key and model first.
+Review/edit the proposed values before clicking Save brand.
 
 DATA AND UPDATES
 Your data, .env file and log are stored in:
@@ -34,3 +39,4 @@ an unrecognized publisher. SHA256SUMS.txt contains its build checksum.
 SCOPE
 This packages the current Phase 1 developer build. It does not add social
 publishing, image/video generation, commercial user accounts or Sniff integration.
+

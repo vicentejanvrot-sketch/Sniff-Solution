@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $root=Split-Path $PSScriptRoot -Parent
-$installer=Join-Path $root 'build\output\Sniff-Solution-Setup-0.1.0-x64.exe'
+$installer=Join-Path $root 'build\output\Sniff-Solution-Setup-0.1.1-x64.exe'
 $testRoot=Join-Path $env:RUNNER_TEMP 'Sniff installer verification'
 $installDir=Join-Path $testRoot 'Installed Application'
 $dataHome=Join-Path $testRoot 'User Data'
@@ -47,3 +47,4 @@ if($uninstall.ExitCode -ne 0){throw 'Uninstall failed.'}
 if(!(Test-Path (Join-Path $dataHome 'data\workspace.json'))){throw 'Uninstall removed user data.'}
 if(!(Test-Path (Join-Path $dataHome '.env'))){throw 'Uninstall removed configuration.'}
 Write-Host 'Installer verification passed: desktop/start-menu shortcuts, bundled runtimes, Python tools, persistence across reinstall/restart, stale desktop-lock recovery, clean shutdown and retained user files.'
+

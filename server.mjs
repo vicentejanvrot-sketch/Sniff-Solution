@@ -4,8 +4,10 @@ import {readFile,writeFile,mkdir,unlink} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Store} from './lib/store.mjs';
-import {skills,providers,id,now,fail,str,validateBrand,validateSettings,audit,promptFor,quality,ledger} from './lib/core.mjs';
+import {skills,providers,id,now,fail,str,normalizeWebsite,validateBrand,validateSettings,audit,promptFor,quality,ledger} from './lib/core.mjs';
 import {providerStatus,generate} from './lib/providers.mjs';
+import {collectWebsite} from './lib/website.mjs';
+import {chooseResearchProvider,researchInput,researchPrompt,parseResearch} from './lib/brand-research.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const MAX_MEDIA=100*1024*1024;
 const mediaTypes=new Set(['image/png','image/jpeg','image/webp','image/gif','application/pdf','text/plain','video/mp4','audio/mpeg','audio/wav']);
@@ -14,7 +16,7 @@ async function body(req,max=200000){
 }
 async function jsonBody(req){try{return JSON.parse((await body(req)).toString('utf8'));}catch(e){if(e.status)throw e;fail('Invalid JSON.');}}
 const json=(res,data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));};
-export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetcher=fetch}={}){
+export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetcher=fetch,websiteReader=collectWebsite}={}){
  const store=await new Store({dir,mode:env.STORAGE_MODE||'local',url:env.SUPABASE_URL||'',key:env.SUPABASE_SECRET_KEY||'',workspace:env.WORKSPACE_ID||'developer',fetcher}).init();
  const enabled=new Set((env.ENABLED_MODULES||'marketing').split(',').map(x=>x.trim()));
  const ready=providerStatus(env);
@@ -48,6 +50,17 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     await store.update(s=>{const j=s.jobs.find(j=>j.status==='queued');if(j){j.status='running';j.startedAt=now();work=structuredClone(j);}});
     if(!work)break;
     try{
+     if(work.type==='brand-research'){
+      await store.update(s=>{s.jobs.find(j=>j.id===work.id).phase='Reading public website and styles';});
+      const evidence=await websiteReader(work.website);
+      await store.update(s=>{const j=s.jobs.find(j=>j.id===work.id);j.phase='Preparing AI brand suggestions';j.providerStartedAt=now();});
+      const generated=await generate(work.provider,work.config,researchPrompt(work.brandInput.name,evidence),{env,fetcher});
+      await store.update(s=>{const j=s.jobs.find(j=>j.id===work.id);j.tokens=generated.tokens;j.costEstimate=generated.costEstimate;});
+      if(generated.incomplete)throw new Error('The AI reached its output limit. No suggestions were applied and no brand was saved.');
+      const result=parseResearch(generated.text,evidence);
+      await store.update(s=>{const j=s.jobs.find(j=>j.id===work.id);j.status='completed';j.phase='Suggestions ready for review';j.finishedAt=now();j.result=result;audit(s,'brand.suggestions_ready',j.id);});
+      continue;
+     }
      const result=await generate(work.provider,work.config,work.prompt,{env,fetcher});
      await store.update(s=>{
       const j=s.jobs.find(x=>x.id===work.id);j.finishedAt=now();j.tokens=result.tokens;j.costEstimate=result.costEstimate;
@@ -56,7 +69,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       if(result.incomplete){draft.status='needs-review';j.status='incomplete';j.error='Provider reached its output limit. Partial draft saved for review.';}else j.status='completed';
       j.draftId=draft.id;s.drafts.unshift(draft);audit(s,'content.generated',draft.id);
      });
-    }catch(e){await store.update(s=>{const j=s.jobs.find(x=>x.id===work.id);j.status='failed';j.finishedAt=now();j.error=e.name==='TimeoutError'?'Provider timed out. Check provider billing before retrying.':e.message;});}
+    }catch(e){await store.update(s=>{const j=s.jobs.find(x=>x.id===work.id);j.status='failed';j.finishedAt=now();j.error=e.name==='TimeoutError'?'Request timed out. Check provider billing before retrying.':e.message;if(j.type==='brand-research'&&!j.providerStartedAt)j.reconciledCost=0;});}
    }
   }finally{working=false;}
  }
@@ -78,6 +91,25 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     if(p==='/api/state'&&req.method==='GET')return json(res,publicState());
     if(p.startsWith('/api/sniff')||p.startsWith('/api/integration'))fail('This module is not enabled in Phase 1.',403);
     if(!enabled.has('marketing'))fail('AI Marketing Studio is not enabled.',403);
+    if(p==='/api/brand-research'&&req.method==='POST'){
+     const body=await jsonBody(req),input=researchInput(body),website=normalizeWebsite(body.website||'');
+     if(!website)fail('Enter the brand website first.');
+     const job=await store.update(s=>{
+      const provider=chooseResearchProvider(s.settings,ready,input.provider);
+      if(input.brandId&&!s.brands.some(b=>b.id===input.brandId))fail('Brand not found.',404);
+      if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('The queue is full. Wait for a job to finish.',409);
+      if(ledger(s).committed+s.settings.reservePerJob>s.settings.monthlyBudget)fail('The monthly budget has no room for another reservation. Review costs in Settings.',409);
+      const j={id:id(),type:'brand-research',skill:'brand-research',brandId:input.brandId,brandInput:{name:input.name,website},website,title:'Brand suggestions: '+input.name,provider,config:structuredClone(s.settings.providers[provider]),status:'queued',phase:'Waiting to read website',reservation:s.settings.reservePerJob,costEstimate:null,createdAt:now()};
+      s.jobs.push(j);audit(s,'brand.research_queued',j.id);return j;
+     });
+     json(res,{id:job.id,status:job.status,provider:job.provider,website:job.website},202);
+     setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
+    }
+    if(/^\/api\/brand-research\/[^/]+$/.test(p)&&req.method==='GET'){
+     const j=store.read().jobs.find(j=>j.id===p.split('/')[3]&&j.type==='brand-research');
+     if(!j)fail('Website analysis not found.',404);
+     return json(res,j);
+    }
     if(p==='/api/brands'&&req.method==='POST'){
      const b=await jsonBody(req),v=validateBrand(b);
      const result=await store.update(s=>{
@@ -85,6 +117,11 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       if(b.id&&!existing)fail('Brand not found.',404);
       if(existing){if(b.version!==existing.version)fail('This brand changed. Reload before saving.',409);Object.assign(existing,v,{version:existing.version+1,updatedAt:now()});}
       else{existing={id:id(),...v,version:1,createdAt:now(),updatedAt:now()};s.brands.push(existing);}
+      if(b.researchJobId){
+       const job=s.jobs.find(j=>j.id===b.researchJobId&&j.type==='brand-research'&&j.status==='completed');
+       if(!job?.result)fail('The selected brand suggestions are unavailable. Analyze the website again.',409);
+       existing.research={jobId:job.id,observedName:job.brandInput.name,observedWebsite:job.website,...structuredClone(job.result)};job.brandId=existing.id;
+      }
       audit(s,'brand.saved',existing.id);return existing;
      });return json(res,result);
     }
@@ -201,3 +238,4 @@ if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.ur
  app.server.listen(port,'127.0.0.1',()=>{console.log('Sniff Solution: http://127.0.0.1:'+port);app.pump().catch(e=>console.error(e.message));});
  for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>app.close().then(()=>process.exit(0)));
 }
+
