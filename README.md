@@ -1,4 +1,4 @@
-# Sniff Solution · Phase 1
+# Sniff Solution · Phase 2
 
 A single-developer AI Marketing Studio: brand profiles, thirteen Instagram content workflows, persistent drafts and editorial review, a private media library, provider jobs, usage estimates and module gates.
 
@@ -16,7 +16,7 @@ The ZIP never includes a real .env or user-data directory. Existing files in the
 
 The [Windows installer workflow](../../actions/workflows/windows-desktop.yml) builds a per-user setup executable with desktop and Start menu shortcuts. The setup executable is also attached to each GitHub Release. It installs to %LOCALAPPDATA%\Programs\Sniff Solution. Use either the installer or the complete ZIP folder, not both: an old installed copy keeps its own files until it is updated or uninstalled.
 
-Node.js and Python are bundled. The shortcut starts a hidden local server and opens the app in your normal browser. Its tray menu can reopen the app, edit API settings, open the data folder and quit. There is no application sign-in.
+Node.js, Python, FFmpeg and FFprobe are bundled. The shortcut starts a hidden local server and opens the app in your normal browser. Its tray menu can reopen the app, edit API settings, open the data folder and quit. There is no application sign-in.
 
 Desktop data, configuration and logs are stored in **%LOCALAPPDATA%\SniffSolution**, separate from installed binaries. Reinstall and uninstall preserve this folder. Source-checkout .data folders are not automatically imported. Existing API keys are never included in build artifacts.
 
@@ -79,7 +79,9 @@ See [PHASE1_TEST_GUIDE.md](PHASE1_TEST_GUIDE.md) for update instructions, real-a
 
 **Original skill source is still required.** The original Instagram skill package and scoring scripts were not present in the supplied repository. The thirteen workflows and Python tools here are new baseline implementations, not a claim that the original code was preserved or its scores reproduced. Provide that package to integrate its original instructions and utilities faithfully. Generic wording checks cannot establish AI authorship, and editorial rubrics do not predict engagement.
 
-There is no image/video generation, final branded rendering, social account connection, scheduled publishing, social analytics or AI Autopilot in Phase 1. Palette and font are stored as brand direction; precise overlays arrive with Phase 2.
+Phase 2 adds Image Studio and Video Studio, OpenAI image generation/edits/batches, Higgsfield Seedance 2.0 text-to-video, and local FFmpeg rendering with approved logo/font/colour overlays. Generated originals are preserved separately from final outputs. Media has review status, caption history and source/derived versions. See [PHASE2_TEST_GUIDE.md](PHASE2_TEST_GUIDE.md) for configuration, testing and limitations.
+
+Image and video provider fees stay unpriced until reconciled. Each image reserves the configured media amount; a batch multiplies that reservation. Local rendering costs zero provider credits. The existing persistent local worker performs production while Sniff is open; a cloud worker is not deployed. Video requests with stored request IDs can be recovered without resubmitting generation. No social connection, scheduled publishing, live analytics, Autopilot or Sniff integration is enabled.
 
 ## Supabase storage
 

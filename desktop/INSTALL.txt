@@ -7,7 +7,7 @@ INSTALL
 3. Follow the installer. It creates desktop and Start menu shortcuts.
 4. Double-click "Sniff Solution" on your desktop.
 
-Node.js and Python are included; no separate runtime installation is needed.
+Node.js, Python, FFmpeg and FFprobe are included; no separate runtime installation is needed.
 The app opens in your normal web browser. Its local server runs behind a tray
 icon beside the Windows clock. Closing the browser does not stop the server.
 Right-click the tray icon and choose "Quit Sniff Solution" to stop it.

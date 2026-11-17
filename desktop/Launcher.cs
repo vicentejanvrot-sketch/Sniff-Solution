@@ -259,6 +259,7 @@ internal sealed class DesktopContext : ApplicationContext
             info.EnvironmentVariables["SNIFF_DESKTOP_HOME"] = Program.Home;
             info.EnvironmentVariables["DATA_DIR"] = Path.Combine(Program.Home, "data");
             info.EnvironmentVariables["PYTHON"] = Path.Combine(root, "runtime", "python", "python.exe");
+            info.EnvironmentVariables["FFMPEG"] = Path.Combine(root, "runtime", "ffmpeg", "ffmpeg.exe");
             server = new Process { StartInfo = info, EnableRaisingEvents = true };
             server.OutputDataReceived += delegate(object sender, DataReceivedEventArgs e)
             {
