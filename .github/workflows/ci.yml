@@ -19,6 +19,8 @@ jobs:
           python-version: '3.12'
       - name: Syntax checks
         run: npm run check
+      - name: Install media renderer for thumbnail and rendering verification
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Core, storage, security and HTTP integration tests
         run: npm test
         env:

@@ -22,7 +22,7 @@ try{
  foreach($name in $names){
   if($name -match '(^|/)\.env$' -or $name -match '(^|/)\.data/' -or $name -match '(^|/)(desktop\.url|desktop-owner\.json|workspace\.json)$'){throw "Complete ZIP contains private or user data: $name"}
  }
- foreach($required in @('SniffSolution.exe','START_SNIFF.cmd','VERSION.txt','build-info.json','package.json','runtime/node.exe','runtime/python/python.exe','public/app.js','desktop/server-runner.mjs','PHASE1_TEST_GUIDE.md','PHASE2_TEST_GUIDE.md','AGENTS.md','runtime/ffmpeg/ffmpeg.exe','runtime/ffmpeg/LICENSE','public/production.js','lib/production.mjs')){
+ foreach($required in @('SniffSolution.exe','START_SNIFF.cmd','VERSION.txt','build-info.json','package.json','runtime/node.exe','runtime/python/python.exe','public/app.js','desktop/server-runner.mjs','PHASE1_TEST_GUIDE.md','PHASE2_TEST_GUIDE.md','AGENTS.md','runtime/ffmpeg/ffmpeg.exe','runtime/ffmpeg/LICENSE','public/thumbnails.js','public/dictation.js','public/production.js','lib/production.mjs')){
   if($names -notcontains $required){throw "Complete ZIP is missing $required at its top level."}
  }
 }finally{$archive.Dispose()}
