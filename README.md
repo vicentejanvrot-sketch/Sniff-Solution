@@ -87,6 +87,8 @@ Image and video provider fees stay unpriced until reconciled. Each image reserve
 
 The target project is `qmgvzvdqtpwipkgbpxyo`. The tracked SQL snapshot is in [db/phase1_foundation.sql](db/phase1_foundation.sql); it is applied once via Supabase migration management, not automatically at server startup.
 
+Phase 2 adds `font/ttf` and `font/otf` to the private media bucket using [db/phase2_media.sql](db/phase2_media.sql). Apply that additive configuration once for existing cloud projects. It preserves bucket visibility, limits, other MIME types and all records.
+
 After its schema is installed, set these **server-only** values in .env:
 ```dotenv
 STORAGE_MODE=supabase

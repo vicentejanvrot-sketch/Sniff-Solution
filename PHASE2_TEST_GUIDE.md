@@ -41,7 +41,7 @@ The default media reservation is US$5 per image or video request. Adjust it and 
 
 Preview an asset, edit its caption/notes, select approved and save. Reopen it and check review history. A stale save must be rejected. New edits/renders need their own approval. Downloads remain available before approval for review; no content is published automatically. Source and derived versions are separate immutable files; review history retains 25 prior metadata revisions. A source with derived assets cannot be deleted until those derivatives are removed. Assets used by active production jobs cannot be deleted.
 
-Restart Sniff and verify assets, review status, request IDs and text drafts persist. Existing Phase 1 workflows must still work. In Supabase mode, verify media upload/download with the locally configured backend credentials. Storage remains private and capped at 100 MiB per file; no schema migration is needed because production records extend the existing workspace document.
+Restart Sniff and verify assets, review status, request IDs and text drafts persist. Existing Phase 1 workflows must still work. In Supabase mode, verify media upload/download with the locally configured backend credentials. Storage remains private and capped at 100 MiB per file. Production records extend the existing workspace document; existing cloud projects also need the additive font MIME configuration in db/phase2_media.sql, applied once by the project administrator, never at app startup.
 
 ## Verification limits and architecture
 
