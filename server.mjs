@@ -1,3 +1,4 @@
+import {videoBriefPrompt} from './lib/video-brief.mjs';
 import http from 'node:http';
 import {spawn} from 'node:child_process';
 import {readFile,writeFile,mkdir,unlink} from 'node:fs/promises';
@@ -105,6 +106,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       const j=s.jobs.find(x=>x.id===work.id);j.finishedAt=now();j.tokens=result.tokens;j.costEstimate=result.costEstimate;
       if(!result.text.trim()) {j.status='failed';j.error='Provider returned no text. Check usage before retrying.';return;}
       const draft={id:id(),brandId:j.brandId,title:j.title,skill:j.skill,text:result.text,status:'draft',createdAt:now(),updatedAt:now(),version:1,versions:[],sources:result.sources,checks:quality(result.text,j.brandSnapshot)};
+      if(j.videoBrief){draft.videoBrief=structuredClone(j.videoBrief);if(result.text.length>16000){j.status='failed';j.error='Prepared brief is too long. No video was generated.';return;}}
       const missingSources=skills.find(s=>s.id===j.skill)?.requiresWeb&&!result.sources.length;
       if(result.incomplete||missingSources){draft.status='needs-review';j.status='incomplete';j.error=result.incomplete?'Provider reached its output limit. Partial draft saved for review.':'No web search sources were returned. Draft saved for review; do not treat it as verified current research.';}else j.status='completed';
       j.draftId=draft.id;s.drafts.unshift(draft);audit(s,'content.generated',draft.id);
@@ -210,6 +212,19 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      });
      return json(res,result);
     }
+    if(p==='/api/video-brief'&&req.method==='POST'){
+     const b=await jsonBody(req),brief=str(b.brief||'',16000),duration=Number(b.duration),aspect=b.aspect;
+     if(!brief)fail('Describe what you want the video to accomplish.');
+     if(![5,10].includes(duration)||!['1:1','9:16','16:9'].includes(aspect))fail('Choose a supported video duration and format.');
+     if(!['openai','anthropic'].includes(b.provider)||!ready[b.provider])fail('Configure an OpenAI or Claude text model and API key for video brief preparation.',409);
+     const job=await store.update(s=>{
+      const brand=s.brands.find(x=>x.id===b.brandId);if(!brand)fail('Choose a brand.');
+      const config=s.settings.providers[b.provider];if(!config?.model)fail('Choose a text model for this provider in Settings.',409);
+      if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('The queue is full. Wait for a job to finish.',409);
+      if(ledger(s).committed+s.settings.reservePerJob>s.settings.monthlyBudget)fail('The budget has no room for the brief preparation reservation.',409);
+      const j={id:id(),type:'video-brief',skill:'video-brief',brandId:brand.id,brandSnapshot:structuredClone(brand),title:str(b.title||'Video brief',150),provider:b.provider,config:structuredClone(config),brief,videoBrief:{originalPrompt:brief,duration,aspect},prompt:videoBriefPrompt(brand,brief,duration,aspect),status:'queued',reservation:s.settings.reservePerJob,costEstimate:null,createdAt:now()};s.jobs.push(j);audit(s,'video_brief.queued',j.id);return j;
+     });json(res,{id:job.id,status:'queued'},202);setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
+    }
     if(p==='/api/jobs'&&req.method==='POST'){
      const b=await jsonBody(req),skill=skills.find(x=>x.id===b.skill);
      if(!skill||!providers.includes(b.provider))fail('Select a skill and provider.');
@@ -314,6 +329,8 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    staticFiles['/production.js']=['production.js','text/javascript; charset=utf-8'];
    staticFiles['/dictation.js']=['dictation.js','text/javascript; charset=utf-8'];
    staticFiles['/thumbnails.js']=['thumbnails.js','text/javascript; charset=utf-8'];
+   staticFiles['/timing.js']=['timing.js','text/javascript; charset=utf-8'];
+   staticFiles['/video-brief.js']=['video-brief.js','text/javascript; charset=utf-8'];
    staticFiles['/reconciliation.js']=['reconciliation.js','text/javascript; charset=utf-8'];
    const entry=staticFiles[p];if(!entry)fail('Not found.',404);
    const data=await readFile(path.join(root,'public',entry[0]));res.writeHead(200,{'Content-Type':entry[1]});res.end(req.method==='HEAD'?undefined:data);

@@ -1,8 +1,8 @@
-# Phase 2 — Content Production (0.2.4)
+# Phase 2 — Content Production (0.2.5)
 
 ## Update
 
-Quit Sniff Solution from its tray icon. Extract the complete Windows app ZIP over the intended app folder. Run START_SNIFF.cmd there and confirm v0.2.4. Existing configuration and records are preserved. Windows packages include Node, Python, FFmpeg and FFprobe; source archives do not.
+Quit Sniff Solution from its tray icon. Extract the complete Windows app ZIP over the intended app folder. Run START_SNIFF.cmd there and confirm v0.2.5. Existing configuration and records are preserved. Windows packages include Node, Python, FFmpeg and FFprobe; source archives do not.
 
 ## Configure securely
 
@@ -21,7 +21,7 @@ On Vicente's desktop installation this file is `C:\Users\vicen\AppData\Local\Sni
 
 Local processing is the accepted setup until go-live. **Render is the chosen future cloud processing provider.** Cloud provisioning is deferred. Publishing remains Phase 3.
 
-Image generation/editing, batching, exact output formats, local rendering, thumbnails, dictation, review/download, installed fonts and cost controls have automated coverage. These checks use mock provider responses and real local media processing; they do not establish paid account access. **A real Higgsfield video generation/playback/download has not yet been tested with the owner's account.** Complete the Video Studio acceptance steps below before signing off that workflow. Keep the returned request ID and any Activity error if the live check fails.
+Image generation/editing, batching, exact output formats, local rendering, thumbnails, dictation, review/download, installed fonts and cost controls have automated coverage. These checks use mock provider responses and real local media processing; they do not establish paid account access. **The owner has reported a completed live Higgsfield generation in Activity; playback/download and the new brief-preparation flow still need live acceptance.** Complete the Video Studio acceptance steps below before signing off that workflow. Keep the returned request ID and any Activity error if the live check fails.
 
 ## Daily cost totals and logo-only overlays (0.2.4)
 
@@ -92,3 +92,14 @@ After completion in Activity, select Review assets. The result opens directly. C
 5. Installed font names/IDs are exposed to the local UI, but local paths and font file bytes are not. The font is copied to a temporary local render folder and removed after rendering. Fonts are not bundled into the app distribution or uploaded to AI providers. If a font is removed before a queued job renders, the job reports that it is unavailable.
 
 Windows verification includes discovery of real fonts and a branded render using a font outside the previous six-font whitelist. Automated tests cover malformed files, stable IDs, private paths and rejection of unknown font selections.
+
+
+## Video goal interpretation and elapsed time (0.2.5)
+
+1. Configure an OpenAI or Claude text model in Settings & Costs, in addition to your Higgsfield credentials. Brief preparation uses a separate text request and the ordinary per-request reservation. Video generation uses the media reservation. Both appear separately in Activity; unknown fees remain unpriced.
+2. Open Video Studio, select a brand, choose 5 or 10 seconds and a supported video format, and describe the outcome in your own words. Select **Prepare video brief**. This saves a text draft only; it does not submit a video to Higgsfield.
+3. Review the **Prepared video brief**, which should turn your goal into feasible scenes, timing, camera direction and continuity. Edit it as needed. The original Creative brief remains unchanged. Select **Start production** only when ready to send that reviewed prompt to Higgsfield.
+4. Changing the original description, brand, duration or format requires preparation again. You can leave while preparation runs: Activity and Drafts & Review retain the result. Return to Video Studio and select the prepared draft under Saved draft to restore its original description and video settings. Incomplete preparations cannot be used as completed briefs.
+5. Check Activity while an image or video runs: **Elapsed** updates during work. After completion or failure, **Total elapsed** remains visible, formatted as seconds/minutes/hours and retained after refresh or restart. It measures submission to recorded finish, including queue wait, final rendering and any gaps before recovery; it is not an isolated provider computation timer. Older records without timestamps display Elapsed time unavailable.
+
+Preparation preserves the user's intent and relevant brand rules without sending the entire saved brand research/history to the video model. It cannot guarantee moderation acceptance, precise generated app screens, readable interface text or a particular visual result. The new workflow is verified with mock AI responses and real FFmpeg rendering; no paid requests are made by automated checks. The owner's Activity screenshot shows a completed live Higgsfield generation; playback/download and the new preparation step still require live user acceptance.
