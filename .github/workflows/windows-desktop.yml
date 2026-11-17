@@ -1,0 +1,44 @@
+name: Windows desktop installer
+on:
+  push:
+    branches: [windows-desktop-installer]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-installer:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Source and API verification
+        shell: pwsh
+        env:
+          PYTHON: python
+        run: |
+          npm run check
+          if ($LASTEXITCODE -ne 0) { throw 'Syntax checks failed.' }
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw 'Node tests failed.' }
+          python -m unittest discover -s tools -p 'test_*.py'
+          if ($LASTEXITCODE -ne 0) { throw 'Python tests failed.' }
+      - name: Build executable and installer
+        shell: pwsh
+        run: ./desktop/build-windows.ps1
+      - name: Verify installed application
+        shell: pwsh
+        run: ./desktop/test-installer.ps1
+      - name: Downloadable Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sniff-Solution-Windows-Installer
+          path: build/output/*
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0

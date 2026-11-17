@@ -1,0 +1,36 @@
+SNIFF SOLUTION - WINDOWS DESKTOP INSTALLER
+Version 0.1.0 - Windows 10/11 x64
+
+INSTALL
+1. Extract this downloaded ZIP.
+2. Double-click Sniff-Solution-Setup-0.1.0-x64.exe.
+3. Follow the installer. It creates desktop and Start menu shortcuts.
+4. Double-click "Sniff Solution" on your desktop.
+
+Node.js and Python are included; no separate runtime installation is needed.
+The app opens in your normal web browser. Its local server runs behind a tray
+icon beside the Windows clock. Closing the browser does not stop the server.
+Right-click the tray icon and choose "Quit Sniff Solution" to stop it.
+
+API KEYS
+Right-click the tray icon and choose "Edit API settings".
+Enter your provider API keys in the .env file, save it, then quit and reopen
+Sniff Solution. Set your model IDs in the app's Settings & Costs screen.
+Keys are not included in this installer. Manual drafts and local storage work
+without API keys; AI calls and cloud storage need your own configured keys.
+
+DATA AND UPDATES
+Your data, .env file and log are stored in:
+%LOCALAPPDATA%\SniffSolution
+Use the tray menu to open that folder.
+Updates and uninstall keep these user files. Back up this folder with the app
+closed. Existing source-checkout .data folders are not imported automatically.
+Quit Sniff from its tray icon before installing a newer build.
+
+WINDOWS SIGNATURE
+This development installer is not code-signed. Windows may identify it as
+an unrecognized publisher. SHA256SUMS.txt contains its build checksum.
+
+SCOPE
+This packages the current Phase 1 developer build. It does not add social
+publishing, image/video generation, commercial user accounts or Sniff integration.

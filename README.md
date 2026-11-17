@@ -2,7 +2,17 @@
 
 A single-developer AI Marketing Studio: brand profiles, thirteen Instagram content workflows, persistent drafts and editorial review, a private media library, provider jobs, usage estimates and module gates.
 
-## Run it on your computer
+## Windows desktop installer
+
+The [Windows installer workflow](../../actions/workflows/windows-desktop.yml) builds a per-user setup executable with desktop and Start menu shortcuts. Download **Sniff-Solution-Windows-Installer** from a successful run's Artifacts section, extract it and run **Sniff-Solution-Setup-0.1.0-x64.exe**.
+
+Node.js and Python are bundled. The shortcut starts a hidden local server and opens the app in your normal browser. Its tray menu can reopen the app, edit API settings, open the data folder and quit. There is no application sign-in.
+
+Desktop data, configuration and logs are stored in **%LOCALAPPDATA%\SniffSolution**, separate from installed binaries. Reinstall and uninstall preserve this folder. Source-checkout .data folders are not automatically imported. Existing API keys are never included in build artifacts.
+
+This development build is unsigned; see the included SHA256SUMS.txt and INSTALL.txt. The installer is tested on a Windows runner for shortcut creation, bundled runtimes/Python checks, persistence across reinstall/restart, interrupted desktop-lock recovery and retained user files after uninstall.
+
+## Run it from source
 
 Install **Node.js 22 or newer** and **Python 3** (Python enables the six editorial tools). Download this branch from GitHub using **Code → Download ZIP**, extract it, and open a terminal in that folder.
 
