@@ -48,6 +48,12 @@ Website analysis uses the same job queue, module gates, reservations and cost tr
 
 Outbound website reads use public DNS checks and pinned addresses, reject local/private targets and nonstandard ports, revalidate every redirect, limit response/decompression sizes and use no browser cookies or provider credentials.
 
+## Phase 1 research verification (0.1.6)
+
+Perplexity requests explicitly enable `web_search` for both direct models and effort presets. **Trend research requires Perplexity**, enforced in the UI and backend before a job is queued. Other providers remain available for the other twelve workflows and for brand suggestions based on captured website content. A trend response without returned search-source URLs is saved as `needs-review` with an `incomplete` Activity job; text alone does not count as completed research. Source presence does not establish that every claim is true or current.
+
+See [PHASE1_TEST_GUIDE.md](PHASE1_TEST_GUIDE.md) for update instructions, real-account acceptance tests, expected results for all thirteen workflows and current verification limits. It is included in the complete Windows ZIP. Automated tests do not use paid provider credentials.
+
 ## First use
 
 1. Open **Brand Studio** and create your brand, including voice, audience, goals, palette, font and claim rules.

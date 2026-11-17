@@ -82,3 +82,13 @@ test('Perplexity Agent API incomplete status is reported as incomplete',async()=
  });
  assert.equal(r.incomplete,true);assert.equal(r.text,'Part');assert.equal(r.costEstimate,null);
 });
+test('Perplexity explicitly enables web search for direct models and effort presets',async()=>{
+ for(const model of ['openai/example-model','fast','sonar-pro']){
+  await generate('perplexity',{model},{system:'rules',user:'research'},{env:{PERPLEXITY_API_KEY:'mock'},fetcher:async(url,options)=>{
+   assert.deepEqual(JSON.parse(options.body).tools,[{type:'web_search'}]);
+   return Response.json({status:'completed',output:[]});
+  }});
+ }
+ assert.deepEqual(skills.filter(s=>s.requiresWeb).map(s=>s.id),['ig-viral']);
+ assert.match(promptFor(skills.find(s=>s.requiresWeb),{},'Travel').user,/never invent sources/);
+});
