@@ -22,7 +22,7 @@ try{
  foreach($name in $names){
   if($name -match '(^|/)\.env$' -or $name -match '(^|/)\.data/' -or $name -match '(^|/)(desktop\.url|desktop-owner\.json|workspace\.json)$'){throw "Complete ZIP contains private or user data: $name"}
  }
- foreach($required in @('SniffSolution.exe','START_SNIFF.cmd','VERSION.txt','build-info.json','package.json','runtime/node.exe','runtime/python/python.exe','public/app.js','desktop/server-runner.mjs','PHASE1_TEST_GUIDE.md','AGENTS.md')){
+ foreach($required in @('SniffSolution.exe','START_SNIFF.cmd','VERSION.txt','build-info.json','package.json','runtime/node.exe','runtime/python/python.exe','public/app.js','desktop/server-runner.mjs','PHASE1_TEST_GUIDE.md','PHASE2_TEST_GUIDE.md','AGENTS.md','runtime/ffmpeg/ffmpeg.exe','runtime/ffmpeg/LICENSE','public/production.js','lib/production.mjs')){
   if($names -notcontains $required){throw "Complete ZIP is missing $required at its top level."}
  }
 }finally{$archive.Dispose()}
@@ -37,7 +37,7 @@ if((Get-Content (Join-Path $appDir '.data\keep.txt') -Raw).Trim() -ne 'keep my l
 # Verify the package works without setup.exe, including Python and record persistence.
 $env:SNIFF_SMOKE_HOME=$dataHome
 foreach($mode in @('write','read')){
- $proc=Start-Process (Join-Path $appDir 'SniffSolution.exe') -ArgumentList "--smoke-test-$mode" -PassThru
+ $proc=Start-Process (Join-Path $appDir 'SniffSolution.exe') -ArgumentList "--smoke-test-$mode" -PassThru -WindowStyle Hidden
  if(!$proc.WaitForExit(120000)){Stop-Process -Id $proc.Id -Force;throw 'Full-package startup timed out.'}
  if($proc.ExitCode -ne 0){
   if(Test-Path (Join-Path $dataHome 'desktop.log')){Get-Content (Join-Path $dataHome 'desktop.log') -Tail 30}
@@ -46,7 +46,7 @@ foreach($mode in @('write','read')){
 }
 # Run the same shortcut helper START_SNIFF.cmd uses, through stock Windows PowerShell.
 $helper=Join-Path $appDir 'desktop\create-shortcuts.ps1'
-$proc=Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$helper+'"')) -Wait -PassThru
+$proc=Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$helper+'"')) -Wait -PassThru -WindowStyle Hidden
 if($proc.ExitCode -ne 0){throw 'Shortcut updater failed.'}
 $shell=New-Object -ComObject WScript.Shell
 $desktop=[Environment]::GetFolderPath('DesktopDirectory')
@@ -65,3 +65,7 @@ if(!(Select-String -Path (Join-Path $appDir 'public\app.js') -SimpleMatch 'dialo
 Write-Host "Verified version $expectedVersion from commit $expectedCommit"
 Write-Host 'Full app ZIP verified: all sources/runtimes, latest website button, standalone launcher, current server version, overwrite-safe configuration/data and desktop shortcut pointing at the extracted folder.'
 
+
+$env:FFMPEG=Join-Path $appDir "runtime\ffmpeg\ffmpeg.exe"
+& (Join-Path $appDir "runtime\node.exe") --test (Join-Path $appDir "test\production.test.mjs")
+if($LASTEXITCODE -ne 0){throw "Packaged production and real renderer tests failed."}

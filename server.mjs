@@ -8,6 +8,7 @@ import {skills,providers,id,now,fail,str,normalizeWebsite,validateBrand,validate
 import {providerStatus,generate} from './lib/providers.mjs';
 import {collectWebsite} from './lib/website.mjs';
 import {chooseResearchProvider,researchInput,researchPrompt,parseResearch} from './lib/brand-research.mjs';
+import {productionSettings,productionInput,rendererAvailable,generateImages,generateVideo,renderAsset} from './lib/production.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const MAX_MEDIA=100*1024*1024;
 const mediaTypes=new Set(['image/png','image/jpeg','image/webp','image/gif','application/pdf','text/plain','video/mp4','audio/mpeg','audio/wav']);
@@ -16,13 +17,14 @@ async function body(req,max=200000){
 }
 async function jsonBody(req){try{return JSON.parse((await body(req)).toString('utf8'));}catch(e){if(e.status)throw e;fail('Invalid JSON.');}}
 const json=(res,data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));};
-export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetcher=fetch,websiteReader=collectWebsite}={}){
+export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetcher=fetch,websiteReader=collectWebsite,assetDownloader,mediaRenderer=renderAsset,pollDelay}={}){
  const appVersion=JSON.parse(await readFile(path.join(root,'package.json'),'utf8')).version;
  let sourceCommit='';try{const info=JSON.parse((await readFile(path.join(root,'build-info.json'),'utf8')).replace(/^\uFEFF/,''));if(/^[0-9a-f]{40}$/.test(info.source_commit||''))sourceCommit=info.source_commit;}catch(e){if(e.code!=='ENOENT'&&!(e instanceof SyntaxError))throw e;}
  const store=await new Store({dir,mode:env.STORAGE_MODE||'local',url:env.SUPABASE_URL||'',key:env.SUPABASE_SECRET_KEY||'',workspace:env.WORKSPACE_ID||'developer',fetcher}).init();
  const enabled=new Set((env.ENABLED_MODULES||'marketing').split(',').map(x=>x.trim()));
  const ready=providerStatus(env);
  const uploads=path.join(store.dir,'uploads');await mkdir(uploads,{recursive:true,mode:0o700});
+ const renderReady=await rendererAvailable(env);
  let working=false,closing=false;
  await store.update(s=>{for(const j of s.jobs)if(j.status==='running'){j.status='interrupted';j.error='Server stopped during this request. Check provider billing before explicitly running again.';j.finishedAt=now();}});
  async function mediaRequest(method,file){
@@ -44,6 +46,14 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
   });if(!res.ok)throw new Error('Media upload failed ('+res.status+').');
  }
  async function removeMedia(file){if(store.mode==='local')await unlink(path.join(uploads,file));else await mediaRequest('DELETE',file);}
+ async function readMedia(m){return store.mode==='local'?readFile(path.join(uploads,m.file)):Buffer.from(await(await mediaRequest('GET',m.file)).arrayBuffer());}
+ async function saveProductionMedia(work,result,{sourceId='',role='generated'}={}){
+  const p=work.production,ext=result.mime==='video/mp4'?'mp4':'png';
+  const media={id:id(),brandId:work.brandId,name:work.title+'-'+role+'.'+ext,mime:result.mime,size:result.bytes.length,tags:'production, '+role,createdAt:now(),status:'needs-review',version:1,reviewHistory:[],jobId:work.id,sourceId,draftId:p.draftId,caption:p.caption,role,aspect:p.aspect,width:result.width||null,height:result.height||null,branding:role==='rendered'&&p.branding,brandSnapshot:p.brandSnapshot};media.file=media.id;
+  await putMedia(media.file,result.bytes,result.mime);
+  try{await store.update(s=>{s.media.unshift(media);const j=s.jobs.find(j=>j.id===work.id);(j.mediaIds||=[]).push(media.id);audit(s,'production.asset_saved',media.id);});}
+  catch(e){await removeMedia(media.file).catch(()=>{});throw e;}return media;
+ }
  async function pump(){
   if(working||closing)return;working=true;
   try{
@@ -52,6 +62,27 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     await store.update(s=>{const j=s.jobs.find(j=>j.status==='queued');if(j){j.status='running';j.startedAt=now();work=structuredClone(j);}});
     if(!work)break;
     try{
+     if(work.type==='production'){
+      const p=work.production;
+      const phase=async text=>store.update(s=>{s.jobs.find(j=>j.id===work.id).phase=text;});
+      let results,incomplete=false;
+      if(p.kind==='image'){
+       await phase('Generating images with OpenAI');
+       const generated=await generateImages(work,{env,fetcher,readMedia});results=generated.images;incomplete=generated.incomplete;
+       await store.update(s=>{s.jobs.find(j=>j.id===work.id).providerUsage=generated.usage;});
+      }else if(p.kind==='video'){
+       results=[await generateVideo(work,{env,fetcher,downloader:assetDownloader,pollDelay,onPhase:phase,onRequest:requestId=>store.update(s=>{s.jobs.find(j=>j.id===work.id).providerRequestId=requestId;})})];
+      }else results=[{bytes:await readMedia(p.sourceSnapshot),mime:p.sourceSnapshot.mime}];
+      // Persist every paid batch output before attempting any rendering.
+      const sources=[];for(const result of results)sources.push(p.kind==='render'?p.sourceSnapshot:await saveProductionMedia(work,result,{sourceId:p.sourceId}));
+      for(let index=0;index<results.length;index++){
+       const result=results[index],source=sources[index];
+       await phase('Preparing final dimensions and brand overlays');
+       const rendered=await mediaRenderer(result,p,{env,dir:store.dir,readMedia});
+       await saveProductionMedia(work,rendered,{sourceId:source.id,role:'rendered'});
+      }
+      await store.update(s=>{const j=s.jobs.find(j=>j.id===work.id);j.status=incomplete?'incomplete':'completed';j.phase='Assets ready for review';j.finishedAt=now();if(incomplete)j.error='Provider returned fewer images than requested. Review the saved assets and provider billing.';if(p.kind==='render'){j.costEstimate=0;j.reconciledCost=0;}audit(s,'production.completed',j.id);});continue;
+     }
      if(work.type==='brand-research'){
       await store.update(s=>{s.jobs.find(j=>j.id===work.id).phase='Reading public website and styles';});
       const evidence=await websiteReader(work.website);
@@ -76,7 +107,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    }
   }finally{working=false;}
  }
- function publicState(){const s=store.read();return {...s,skills,modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 1 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
+ function publicState(){const s=store.read();return {...s,skills,production:{renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!(env.HF_API_KEY_ID&&env.HF_API_KEY_SECRET),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 2 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
  const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Cache-Control','no-store');
@@ -94,6 +125,23 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     if(p==='/api/state'&&req.method==='GET')return json(res,publicState());
     if(p.startsWith('/api/sniff')||p.startsWith('/api/integration'))fail('This module is not enabled in Phase 1.',403);
     if(!enabled.has('marketing'))fail('AI Marketing Studio is not enabled.',403);
+    if(p==='/api/production'&&req.method==='POST'){
+     const b=await jsonBody(req);
+     const job=await store.update(s=>{
+      const production=productionInput(b,s),config=productionSettings(s.settings.production);
+      if(!renderReady&&mediaRenderer===renderAsset)fail('FFmpeg is not configured. Use the complete Windows app or configure FFMPEG locally.',409);
+      if(production.kind==='image'&&(!env.OPENAI_API_KEY||!config.imageModel))fail('Configure OPENAI_API_KEY locally and an image model in Settings.',409);
+      if(production.kind==='video'&&(!env.HF_API_KEY_ID||!env.HF_API_KEY_SECRET))fail('Configure HF_API_KEY_ID and HF_API_KEY_SECRET in your local settings file.',409);
+      if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('The queue is full. Wait for a job to finish.',409);
+      const reservation=production.kind==='render'?0:config.reserve*production.count;
+      if(ledger(s).committed+reservation>s.settings.monthlyBudget)fail('The monthly budget has no room for this media reservation.',409);
+      const j={id:id(),type:'production',skill:production.kind+'-studio',brandId:production.brandSnapshot.id,title:production.title,production,provider:production.kind==='render'?'local':production.kind==='image'?'openai':'higgsfield',config:{model:production.kind==='render'?'FFmpeg':production.kind==='image'?config.imageModel:config.videoModel},status:'queued',phase:'Waiting for media worker',reservation,costEstimate:null,createdAt:now(),mediaIds:[]};s.jobs.push(j);audit(s,'production.queued',j.id);return j;
+     });json(res,{id:job.id,status:job.status},202);setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
+    }
+    if(/^\/api\/production\/[^/]+\/recover$/.test(p)&&req.method==='POST'){
+     await store.update(s=>{const j=s.jobs.find(j=>j.id===p.split('/')[3]&&j.type==='production');if(!j?.providerRequestId||j.production.kind!=='video')fail('There is no recoverable video request.',409);if(['queued','running','completed'].includes(j.status)||j.mediaIds?.length)fail('Request is active or already has saved media. Render the saved source from the studio.',409);if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('Queue is full.',409);j.status='queued';j.phase='Recovering existing Higgsfield request';delete j.error;delete j.finishedAt;audit(s,'production.recover',j.id);});
+     json(res,{ok:true},202);setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
+    }
     if(p==='/api/brand-research'&&req.method==='POST'){
      const body=await jsonBody(req),input=researchInput(body),website=normalizeWebsite(body.website||'');
      if(!website)fail('Enter the brand website first.');
@@ -137,7 +185,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      });return json(res,{ok:true});
     }
     if(p==='/api/settings'&&req.method==='PUT'){
-     const settings=validateSettings(await jsonBody(req));
+     const b=await jsonBody(req),settings=validateSettings(b);settings.production=productionSettings(b.production||store.read().settings.production);
      await store.update(s=>{s.settings=settings;audit(s,'settings.saved','workspace');});
      return json(res,{ok:true});
     }
@@ -145,7 +193,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      const b=await jsonBody(req),text=str(b.text,30000);
      if(!['hook','beats','caption','humanizer','detection','swipe'].includes(b.command))fail('Unknown editorial check.');
      const result=await new Promise((resolve,reject)=>{
-      const child=spawn(env.PYTHON||'python3',[path.join(root,'tools','editorial_checks.py'),b.command],{stdio:['pipe','pipe','ignore'],shell:false});
+      const child=spawn(env.PYTHON||(process.platform==='win32'?'python':'python3'),[path.join(root,'tools','editorial_checks.py'),b.command],{stdio:['pipe','pipe','ignore'],shell:false,windowsHide:true});
       let output='';const timer=setTimeout(()=>{child.kill();reject(new Error('Editorial check timed out.'));},5000);
       child.stdout.on('data',chunk=>{output+=chunk;if(output.length>200000){child.kill();reject(new Error('Editorial output limit reached.'));}});
       child.on('error',()=>{clearTimeout(timer);reject(Object.assign(new Error('Install Python 3 or set PYTHON in the server .env file to enable these checks.'),{status:409}));});
@@ -200,12 +248,12 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      return json(res,{ok:true});
     }
     if(p==='/api/media'&&req.method==='POST'){
-     const mime=(req.headers['content-type']||'').split(';')[0];if(!mediaTypes.has(mime))fail('Unsupported file format. Use PNG, JPEG, WebP, GIF, PDF, TXT, MP4, MP3 or WAV.');
+     const mime=(req.headers['content-type']||'').split(';')[0];if(!mediaTypes.has(mime)&&!['font/ttf','font/otf'].includes(mime))fail('Unsupported file format. Use images, MP4, audio, PDF, TXT or TTF/OTF fonts.');
      let name;try{name=decodeURIComponent(req.headers['x-file-name']||'');}catch{fail('Invalid filename.');}name=str(name,250);if(!name)fail('Filename required.');
      const brandId=req.headers['x-brand-id'];if(!store.read().brands.some(b=>b.id===brandId))fail('Select a brand.');
      const bytes=await body(req,MAX_MEDIA);if(!bytes.length)fail('File is empty.');
      const media={id:id(),brandId,name,mime,size:bytes.length,tags:str(req.headers['x-tags']||'',500),createdAt:now()};
-     media.file=media.id;
+     media.file=media.id;media.status='needs-review';media.version=1;media.reviewHistory=[];
      await putMedia(media.file,bytes,mime);
      try{await store.update(s=>{s.media.unshift(media);audit(s,'media.uploaded',media.id);});}
      catch(e){await removeMedia(media.file).catch(()=>{});throw e;}
@@ -213,11 +261,17 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     }
     if(/^\/api\/media\/[^/]+$/.test(p)){
      const m=store.read().media.find(m=>m.id===p.split('/')[3]);if(!m)fail('Media not found.',404);
+     if(req.method==='PUT'){
+      const b=await jsonBody(req);if(!['draft','needs-review','approved'].includes(b.status))fail('Choose a review status.');
+      const result=await store.update(s=>{const asset=s.media.find(x=>x.id===m.id);if((asset.version||1)!==b.version)fail('This asset changed. Reload before saving.',409);const history=asset.reviewHistory||=[];history.unshift({version:asset.version||1,status:asset.status||'needs-review',caption:asset.caption||'',at:now()});asset.reviewHistory=history.slice(0,25);asset.status=b.status;asset.caption=str(b.caption||'',30000);asset.version=(asset.version||1)+1;asset.updatedAt=now();audit(s,'media.'+b.status,asset.id);return asset;});return json(res,result);
+     }
      if(req.method==='GET'){
       const bytes=store.mode==='local'?await readFile(path.join(uploads,m.file)):Buffer.from(await(await mediaRequest('GET',m.file)).arrayBuffer());
       res.writeHead(200,{'Content-Type':m.mime,'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(m.name)});res.end(bytes);return;
      }
      if(req.method==='DELETE'){
+      const snapshot=store.read();if(snapshot.jobs.some(j=>['queued','running'].includes(j.status)&&j.production&&[j.production.sourceId,j.production.logoId,j.production.fontId].includes(m.id)))fail('This asset is being used by an active media job.',409);
+      if(snapshot.media.some(x=>x.sourceId===m.id))fail('This asset has derived versions. Delete those versions first to preserve their source history.',409);
       // Remove the stored file first; failed metadata write remains visible and recoverable.
       await removeMedia(m.file);
       await store.update(s=>{s.media=s.media.filter(x=>x.id!==m.id);audit(s,'media.deleted',m.id);});
@@ -228,6 +282,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    }
    if(!['GET','HEAD'].includes(req.method))fail('Method not allowed.',405);
    const staticFiles={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+   staticFiles['/production.js']=['production.js','text/javascript; charset=utf-8'];
    const entry=staticFiles[p];if(!entry)fail('Not found.',404);
    const data=await readFile(path.join(root,'public',entry[0]));res.writeHead(200,{'Content-Type':entry[1]});res.end(req.method==='HEAD'?undefined:data);
   }catch(e){if(!res.headersSent)json(res,{error:e.status?e.message:'Operation failed. Check server configuration and storage availability.'},e.status||500);else res.end();}
