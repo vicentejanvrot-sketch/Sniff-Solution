@@ -92,12 +92,14 @@ jobs:
           zip="release/Sniff-Solution-Windows-Full-App-${VERSION}-${SHORT}.zip"
           test -f "$zip"
           (cd release && sha256sum -c SHA256SUMS.txt)
-          unzip -p "$zip" build-info.json | python3 -c "import json,os,sys; d=json.loads(sys.stdin.read().lstrip('\ufeff')); assert d['version']==os.environ['VERSION'], d; assert d['source_commit']==os.environ['GITHUB_SHA'], d; print('build-info OK', d['version'], d['source_commit'])"
-          unzip -p "$zip" VERSION.txt | grep -qx "${VERSION}"
-          unzip -p "$zip" public/app.js | grep -q 'Suggest from website'
-          unzip -p "$zip" public/app.js | grep -q 'dialog-version'
           if unzip -Z1 "$zip" | grep -Ei '(^|/)\.env$|(^|/)\.data/'; then echo 'Private files found in ZIP'; exit 1; fi
-          for f in SniffSolution.exe START_SNIFF.cmd runtime/node.exe runtime/python/python.exe server.mjs; do unzip -Z1 "$zip" | grep -qx "$f"; done
+          unzip -q "$zip" -d check
+          python3 -c "import json,os; d=json.loads(open('check/build-info.json',encoding='utf-8-sig').read()); assert d['version']==os.environ['VERSION'], d; assert d['source_commit']==os.environ['GITHUB_SHA'], d; print('build-info OK', d['version'], d['source_commit'])"
+          test "$(tr -d '\r\n' < check/VERSION.txt)" = "$VERSION"
+          grep -c 'Suggest from website' check/public/app.js
+          grep -c 'dialog-version' check/public/app.js
+          for f in SniffSolution.exe START_SNIFF.cmd runtime/node.exe runtime/python/python.exe server.mjs desktop/server-runner.mjs; do test -f "check/$f" || { echo "missing $f"; exit 1; }; done
+          echo "ZIP verified: $(unzip -Z1 "$zip" | wc -l) entries"
           cp "$zip" release/Sniff-Solution-Windows-Full-App.zip
       - name: Publish GitHub Release
         env:
