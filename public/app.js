@@ -55,6 +55,64 @@ function brands(el){
  document.querySelectorAll('[data-edit-brand]').forEach(b=>b.onclick=()=>brandDialog(state.brands.find(x=>x.id===b.dataset.editBrand)));
  document.querySelectorAll('[data-use-brand]').forEach(b=>b.onclick=()=>{activeBrand=b.dataset.useBrand;localStorage.setItem('sniff-brand',activeBrand);navigate('skills');});
 }
+// Brand dialog previews. No remote fonts are loaded (loopback-only app, strict CSP), so a font preview
+// is only exact when that font is installed on this computer; otherwise we say a fallback is shown.
+const COMMON_FONTS=['Arial','Helvetica','Verdana','Tahoma','Trebuchet MS','Georgia','Times New Roman','Segoe UI','Roboto','Open Sans'];
+const FONT_SAMPLE='Your next adventure starts with one well-planned step. 0123456789';
+const GENERIC_FONTS=new Set(['serif','sans-serif','monospace','cursive','fantasy','system-ui','ui-sans-serif','ui-serif','ui-monospace','ui-rounded']);
+const HEX_SWATCH=/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const fontInstalledCache=new Map();let fontCanvas;
+function fontFamilies(value){return String(value||'').split(',').map(f=>f.trim().replace(/^["']+|["']+$/g,'').trim()).filter(Boolean).slice(0,8);}
+function cssFontStack(value){return fontFamilies(value).map(n=>GENERIC_FONTS.has(n.toLowerCase())?n.toLowerCase():'"'+n.replace(/["\\]/g,'')+'"').concat('sans-serif').join(', ');}
+const FONT_REFERENCES=['Arial','Times New Roman','Segoe UI','Verdana','Tahoma','Georgia','Trebuchet MS','Calibri','Inter','Liberation Sans','DejaVu Sans','Roboto','Open Sans','Helvetica'];
+function fontWidths(stack){
+ const ctx=(fontCanvas||=document.createElement('canvas')).getContext('2d');
+ return ['mmmmmmmmmmlli1WQ@#&wy','Hamburgefonstiv 0123456789'].map(text=>{ctx.font='72px '+stack;return ctx.measureText(text).width;}).join('|');
+}
+function fontProbe(name){
+ const key=name.toLowerCase();if(fontInstalledCache.has(key))return fontInstalledCache.get(key);
+ let result={installed:GENERIC_FONTS.has(key),signature:''};
+ if(!result.installed){try{
+  const quoted='"'+name.replace(/["\\]/g,'')+'"';
+  result.installed=['monospace','serif','sans-serif'].some(base=>fontWidths(quoted+', '+base)!==fontWidths(base));
+  result.signature=fontWidths(quoted+', monospace');
+ }catch{result.installed=false;}}
+ fontInstalledCache.set(key,result);return result;
+}
+// Operating systems can quietly substitute a missing family (Windows maps Helvetica to Arial, Linux may map
+// Segoe UI to its default font). If a name renders exactly like an earlier reference font, treat it as a stand-in.
+function fontStandIn(name){
+ const probe=fontProbe(name);if(!probe.installed||!probe.signature)return '';
+ const at=FONT_REFERENCES.findIndex(n=>n.toLowerCase()===name.toLowerCase());
+ return FONT_REFERENCES.slice(0,at<0?FONT_REFERENCES.length:at).find(ref=>{const r=fontProbe(ref);return r.installed&&r.signature===probe.signature&&!fontStandInSelf(ref);})||'';
+}
+function fontStandInSelf(ref){const at=FONT_REFERENCES.indexOf(ref),sig=fontProbe(ref).signature;return FONT_REFERENCES.slice(0,at).some(other=>{const o=fontProbe(other);return o.installed&&o.signature===sig;});}
+function fontInstalled(name){return fontProbe(name).installed&&!fontStandIn(name);}
+function fontStatus(value){
+ const names=fontFamilies(value);if(!names.length)return 'No font entered. The preview uses a default sans-serif font.';
+ const first=names[0];
+ if(GENERIC_FONTS.has(first.toLowerCase()))return '“'+first+'” is a generic family, so this computer picks the actual font.';
+ const standIn=fontStandIn(first);
+ if(standIn)return '“'+first+'” renders exactly like “'+standIn+'” here, so it may be a substitute rather than the real font. The real '+first+' may look different.';
+ if(fontInstalled(first))return '“'+first+'” is installed on this computer, so this preview uses it.';
+ const used=names.slice(1).find(n=>!GENERIC_FONTS.has(n.toLowerCase())&&fontInstalled(n));
+ return '“'+first+'” is not installed on this computer, so this preview uses '+(used?'“'+used+'” from your list':'a fallback font')+'. The real font may look different.';
+}
+function paintSwatches(root){root.querySelectorAll('[data-hex]').forEach(el=>{if(HEX_SWATCH.test(el.dataset.hex))el.style.backgroundColor=el.dataset.hex;});}
+function renderSwatches(el,value){
+ const tokens=String(value||'').split(/[\s,]+/).filter(Boolean).slice(0,24);
+ el.innerHTML=tokens.length?tokens.map(t=>/^#[0-9a-f]{6}$/i.test(t)?'<span class="swatch-chip"><span class="swatch" data-hex="'+esc(t)+'" aria-hidden="true"></span>'+esc(t.toUpperCase())+'</span>':'<span class="swatch-chip invalid" title="Not a #RRGGBB colour"><span class="swatch" aria-hidden="true"></span>'+esc(t)+' · not #RRGGBB</span>').join(''):'<span class="hint">No colours yet.</span>';
+ paintSwatches(el);
+}
+function renderFontSample(el,value,label){
+ el.innerHTML='<small>'+esc(label)+': <strong>'+esc(value.trim()||'(empty)')+'</strong></small><p class="font-sample">'+esc(FONT_SAMPLE)+'</p><small class="hint">'+esc(fontStatus(value))+'</small>';
+ el.querySelector('.font-sample').style.fontFamily=cssFontStack(value);
+}
+function fontOptions(suggested){
+ const label=n=>esc(n)+(fontInstalled(n)?'':fontStandIn(n)?' · not installed here, preview shows '+esc(fontStandIn(n)):' · not installed here, preview uses a fallback');
+ const common=COMMON_FONTS.filter(n=>!suggested||n.toLowerCase()!==suggested.toLowerCase());
+ return '<option value="">Typed or custom font</option>'+(suggested?'<optgroup label="Suggested from website"><option value="'+esc(suggested)+'">'+label(suggested)+' · suggested</option></optgroup>':'')+'<optgroup label="Common fonts">'+common.map(n=>'<option value="'+esc(n)+'">'+label(n)+'</option>').join('')+'</optgroup>';
+}
 let brandDialogSequence=0;
 function brandDialog(brand={},completedResearch=null){
  const session=++brandDialogSequence;
@@ -62,9 +120,20 @@ function brandDialog(brand={},completedResearch=null){
  const fields=[['name','Brand name',true],['website','Website'],['palette','Brand colours · #RRGGBB, comma separated'],['font','Font'],['voice','Tone of voice'],['audience','Audience'],['goals','Marketing goals'],['allowedClaims','Allowed claims and supporting facts'],['forbiddenClaims','Prohibited claims · one phrase per line']];
  const providerOptions='<option value="">Automatic · prefer Perplexity</option>'+['perplexity','openai','anthropic'].map(p=>'<option value="'+p+'">'+({perplexity:'Perplexity',openai:'OpenAI',anthropic:'Claude'}[p])+(state.providerStatus[p]?'':' · key needed')+'</option>').join('');
  const action='<div class="full brand-research-action"><div><strong>Start with the name and website</strong><p class="hint">Read public website pages and styles, then prepare editable brand suggestions. Nothing is saved until you choose Save brand.</p></div><div class="actions"><label>Research provider<select id="brand-research-provider" aria-label="Research provider">'+providerOptions+'</select></label><button id="suggest-brand" type="button">✦ Suggest from website</button></div><p id="brand-research-status" class="hint" role="status" aria-live="polite"></p></div>';
- modal.innerHTML='<div class="dialog-header"><h2>'+esc(brand.id?'Edit brand':'Create a brand')+' <span class="version-badge" id="dialog-version" title="'+esc(state.build||'')+'">v'+esc(state.appVersion||'restart required')+'</span></h2><button id="close-modal" aria-label="Close dialog">×</button></div><form id="brand-form"><div class="form-grid">'+fields.map(([key,label,required],i)=>'<div class="'+(i>3?'full':'')+'"><label for="brand-'+key+'">'+label+'</label>'+(i>3?'<textarea id="brand-'+key+'" name="'+key+'">'+esc(brand[key]||'')+'</textarea>':'<input id="brand-'+key+'" name="'+key+'" value="'+esc(brand[key]||(key==='font'?'Arial':''))+'" '+(required?'required':'')+' maxlength="'+(key==='website'?500:key==='name'?120:key==='font'?100:200)+'">')+'<div data-field-suggestion="'+key+'"></div></div>'+(i===1?action:'')).join('')+'</div><section id="brand-research-evidence" class="note" hidden></section><p class="hint">Colours and fonts are candidates observed in accessible HTML/CSS, not verified brand guidelines. Tone, audience, goals and prohibited phrases are recommendations. Review factual claims and all suggestions before saving.</p><div class="actions"><button class="primary" type="submit">Save brand</button>'+(brand.id?'<button class="danger" type="button" id="delete-brand">Delete brand</button>':'')+'</div></form>';
+ modal.innerHTML='<div class="dialog-header"><h2>'+esc(brand.id?'Edit brand':'Create a brand')+' <span class="version-badge" id="dialog-version" title="'+esc(state.build||'')+'">v'+esc(state.appVersion||'restart required')+'</span></h2><button id="close-modal" aria-label="Close dialog">×</button></div><form id="brand-form"><div class="form-grid">'+fields.map(([key,label,required],i)=>'<div class="'+(i>3?'full':'')+'"><label for="brand-'+key+'">'+label+'</label>'+(i>3?'<textarea id="brand-'+key+'" name="'+key+'">'+esc(brand[key]||'')+'</textarea>':'<input id="brand-'+key+'" name="'+key+'" value="'+esc(brand[key]||(key==='font'?'Arial':''))+'" '+(required?'required':'')+' maxlength="'+(key==='website'?500:key==='name'?120:key==='font'?100:200)+'">')+(key==='palette'?'<div class="swatch-row" data-palette-preview aria-label="Colour preview"></div>':'')+(key==='font'?'<div class="font-picker"><select id="brand-font-choice" aria-label="Choose a common font"></select><div id="brand-font-preview" class="font-preview" aria-live="polite"></div></div>':'')+'<div data-field-suggestion="'+key+'"></div></div>'+(i===1?action:'')).join('')+'</div><section id="brand-research-evidence" class="note" hidden></section><p class="hint">Colours and fonts are candidates observed in accessible HTML/CSS, not verified brand guidelines. Tone, audience, goals and prohibited phrases are recommendations. Review factual claims and all suggestions before saving.</p><div class="actions"><button class="primary" type="submit">Save brand</button>'+(brand.id?'<button class="danger" type="button" id="delete-brand">Delete brand</button>':'')+'</div></form>';
  const form=modal.querySelector('#brand-form'),button=modal.querySelector('#suggest-brand'),status=modal.querySelector('#brand-research-status'),evidence=modal.querySelector('#brand-research-evidence');
  const isCurrent=()=>!closed&&modal.open&&session===brandDialogSequence;
+ const fontChoice=modal.querySelector('#brand-font-choice');let suggestedFont='';
+ function updatePalettePreview(){renderSwatches(modal.querySelector('[data-palette-preview]'),form.elements.palette.value);}
+ function updateFontPreview(){
+  const value=form.elements.font.value;renderFontSample(modal.querySelector('#brand-font-preview'),value,'Font field preview');
+  const match=[...fontChoice.options].find(o=>o.value&&o.value.toLowerCase()===value.trim().toLowerCase());fontChoice.value=match?match.value:'';
+ }
+ function updatePreviews(){updatePalettePreview();updateFontPreview();}
+ fontChoice.innerHTML=fontOptions('');
+ fontChoice.onchange=()=>{if(!fontChoice.value)return;form.elements.font.value=fontChoice.value;form.elements.font.dispatchEvent(new Event('input',{bubbles:true}));};
+ form.elements.palette.addEventListener('input',updatePalettePreview);form.elements.font.addEventListener('input',updateFontPreview);
+ updatePreviews();
  function applyResult(job,baseline={}){
   if(!isCurrent())return;
   lastResult=job.result;researchJobId=job.id;
@@ -77,16 +146,21 @@ function brandDialog(brand={},completedResearch=null){
    const emptyAtStart=!baseline[key]||(key==='font'&&!brand.id&&baseline[key]==='Arial');
    const autoApply=identityUnchanged&&unchanged&&emptyAtStart;
    if(autoApply){input.value=value;applied++;}
-   holder.innerHTML='<div class="brand-field-suggestion"><small>'+esc(lastResult.fieldOrigins[key])+'</small><details><summary>View suggestion</summary><pre>'+esc(value)+'</pre></details><button type="button">Use this suggestion</button></div>';
+   const preview=key==='palette'?'<div class="swatch-row" data-suggestion-swatches></div>':key==='font'?'<div class="font-preview" data-suggestion-font></div>':'<pre>'+esc(value)+'</pre>';
+   holder.innerHTML='<div class="brand-field-suggestion"><small>'+esc(lastResult.fieldOrigins[key])+'</small><details'+(key==='palette'||key==='font'?' open':'')+'><summary>View suggestion</summary>'+preview+'</details><button type="button">Use this suggestion</button></div>';
+   if(key==='palette')renderSwatches(holder.querySelector('[data-suggestion-swatches]'),value);
+   if(key==='font'){suggestedFont=fontFamilies(value)[0]||'';fontChoice.innerHTML=fontOptions(suggestedFont);renderFontSample(holder.querySelector('[data-suggestion-font]'),value,'Suggested font');}
    holder.querySelector('button').onclick=()=>{input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));toast('Suggestion applied. You can edit it before saving.');};
   }
+  updatePreviews();
   const sources=lastResult.sources.filter(s=>/^https?:\/\//.test(s.url));
   evidence.hidden=false;
-  evidence.innerHTML='<strong>Suggestions ready · review before saving</strong><p>'+applied+' empty/default fields filled. Existing text and edits made during analysis are kept. '+(!identityUnchanged?'The name or website has changed since this analysis; suggestions were not filled automatically. ':'')+'</p><button id="apply-all-brand-suggestions" type="button">Use all suggestions</button><details><summary>Website evidence and detected styling</summary><p>Read '+esc(date(lastResult.capturedAt))+' · <a target="_blank" rel="noopener noreferrer" href="'+esc(lastResult.finalUrl)+'">'+esc(lastResult.finalUrl)+'</a></p><ul>'+lastResult.styling.colors.map(x=>'<li><strong>'+esc(x.value)+'</strong> — '+esc(x.context)+' · '+esc(x.source)+'</li>').join('')+lastResult.styling.fonts.map(x=>'<li><strong>'+esc(x.value)+'</strong> — '+esc(x.context)+' · '+esc(x.source)+'</li>').join('')+'</ul><p class="hint">CSS can include unused styles and fallback fonts. These candidates have not been measured from a rendered page.</p>'+sources.map(s=>'<p><a href="'+esc(s.url)+'" target="_blank" rel="noopener noreferrer">'+esc(s.kind)+': '+esc(s.url)+'</a></p>').join('')+'</details>'+(lastResult.notes.length?'<details><summary>Assumptions and limitations</summary><ul>'+lastResult.notes.map(n=>'<li>'+esc(n)+'</li>').join('')+'</ul></details>':'');
+  evidence.innerHTML='<strong>Suggestions ready · review before saving</strong><p>'+applied+' empty/default fields filled. Existing text and edits made during analysis are kept. '+(!identityUnchanged?'The name or website has changed since this analysis; suggestions were not filled automatically. ':'')+'</p><button id="apply-all-brand-suggestions" type="button">Use all suggestions</button><details><summary>Website evidence and detected styling</summary><p>Read '+esc(date(lastResult.capturedAt))+' · <a target="_blank" rel="noopener noreferrer" href="'+esc(lastResult.finalUrl)+'">'+esc(lastResult.finalUrl)+'</a></p><ul>'+lastResult.styling.colors.map(x=>'<li><span class="swatch" data-hex="'+esc(x.value)+'" aria-hidden="true"></span><strong>'+esc(x.value)+'</strong> — '+esc(x.context)+' · '+esc(x.source)+'</li>').join('')+lastResult.styling.fonts.map(x=>'<li><strong>'+esc(x.value)+'</strong> — '+esc(x.context)+' · '+esc(x.source)+'</li>').join('')+'</ul><p class="hint">CSS can include unused styles and fallback fonts. These candidates have not been measured from a rendered page.</p>'+sources.map(s=>'<p><a href="'+esc(s.url)+'" target="_blank" rel="noopener noreferrer">'+esc(s.kind)+': '+esc(s.url)+'</a></p>').join('')+'</details>'+(lastResult.notes.length?'<details><summary>Assumptions and limitations</summary><ul>'+lastResult.notes.map(n=>'<li>'+esc(n)+'</li>').join('')+'</ul></details>':'');
+  paintSwatches(evidence);
   evidence.querySelector('#apply-all-brand-suggestions').onclick=()=>{
    const entries=Object.entries(lastResult.suggestions).filter(([key,value])=>value&&form.elements[key]);
    if(entries.some(([key,value])=>form.elements[key].value&&form.elements[key].value!==value)&&!confirm('Replace the existing field values with these suggestions? You can still edit everything before saving.'))return;
-   entries.forEach(([key,value])=>{form.elements[key].value=value;});
+   entries.forEach(([key,value])=>{form.elements[key].value=value;});updatePreviews();
    status.textContent='Suggestions applied. Review or edit the fields, then choose Save brand.';
   };
   status.textContent='Suggestions are ready. Review or edit the fields, then choose Save brand.';

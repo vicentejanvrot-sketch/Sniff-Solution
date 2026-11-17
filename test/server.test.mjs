@@ -24,7 +24,7 @@ async function untilDone(request,id){
 }
 test('local developer HTTP boundaries and module checks',async t=>{
  const {request,base}=await fixture(t);
- const state=await request('/api/state');assert.equal(state.status,200);assert.equal(state.body.role,'developer-owner');assert.equal(state.body.appVersion,'0.1.3');
+ const state=await request('/api/state');assert.equal(state.status,200);assert.equal(state.body.role,'developer-owner');assert.equal(state.body.appVersion,'0.1.4');
  assert.equal((await fetch(base+'/api/state')).status,403);
  assert.equal((await request('/api/state','GET',undefined,{Origin:'https://evil.example'})).status,403);
  assert.equal((await request('/api/sniff/prospects')).status,403);
