@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {defaults,skills,validateBrand,validateSettings,quality,promptFor,ledger,now} from '../lib/core.mjs';
-import {generate} from '../lib/providers.mjs';
+import {generate,perplexityTarget} from '../lib/providers.mjs';
 
 test('all thirteen distinct workflows preserve brand and factual constraints',()=>{
  assert.equal(skills.length,13);assert.equal(new Set(skills.map(s=>s.id)).size,13);
@@ -40,13 +40,19 @@ test('provider adapters handle responses, usage and citations with no key exposu
    let request;
    const data=provider==='openai'?{status:'completed',output:[{content:[{type:'output_text',text:'Draft'}]}],usage:{input_tokens:100,output_tokens:20}}:
     provider==='anthropic'?{content:[{type:'text',text:'Draft'}],stop_reason:'end_turn',usage:{input_tokens:100,output_tokens:20}}:
-    {choices:[{message:{content:'Draft'},finish_reason:'stop'}],usage:{prompt_tokens:100,completion_tokens:20},citations:['https://example.com','javascript:bad']};
+    {status:'completed',output:[{type:'search_results',results:[{id:1,url:'https://example.com'},{id:2,url:'javascript:bad'}]},{type:'message',role:'assistant',content:[{type:'output_text',text:'Draft',annotations:[]}]}],usage:{input_tokens:100,output_tokens:20,cost:{currency:'USD',total_cost:9}}};
    const result=await generate(provider,{model:'test-model',inputRate:1,outputRate:2},{system:'rules',user:'brief'},{
     env:{[provider.toUpperCase()+'_API_KEY']:'test-secret'},fetcher:async(url,options)=>{request={url,options};return Response.json(data);}
    });
    assert.equal(result.text,'Draft');assert.equal(result.costEstimate,0.00014);assert.equal(result.incomplete,false);
    assert.ok(!JSON.stringify(result).includes('test-secret'));assert.ok(request.url.startsWith('https://'));
-   if(provider==='perplexity')assert.deepEqual(result.sources,['https://example.com']);
+   if(provider==='perplexity'){
+    assert.deepEqual(result.sources,['https://example.com']);
+    assert.equal(request.url,'https://api.perplexity.ai/v1/agent');
+    const sent=JSON.parse(request.options.body);
+    assert.deepEqual({model:sent.model,instructions:sent.instructions,input:sent.input,max_output_tokens:sent.max_output_tokens},{model:'test-model',instructions:'rules',input:'brief',max_output_tokens:2500});
+    assert.equal(request.options.headers.Authorization,'Bearer test-secret');
+   }
   });
  }
 });
@@ -60,4 +66,19 @@ test('provider errors are not retried and never echo remote response bodies',asy
  let calls=0;
  await assert.rejects(generate('openai',{model:'test'},{system:'s',user:'u'},{env:{OPENAI_API_KEY:'secret'},fetcher:async()=>{calls++;return new Response('secret response',{status:429});}}),/HTTP 429/);
  assert.equal(calls,1);
+});
+test('Perplexity settings map former Sonar models and effort presets to the Agent API',()=>{
+ assert.deepEqual(perplexityTarget('sonar'),{effort:'fast'});
+ assert.deepEqual(perplexityTarget('sonar-pro'),{effort:'fast'});
+ assert.deepEqual(perplexityTarget('sonar-reasoning-pro'),{effort:'low'});
+ assert.deepEqual(perplexityTarget('sonar-deep-research'),{effort:'high'});
+ assert.deepEqual(perplexityTarget('Medium'),{effort:'medium'});
+ assert.deepEqual(perplexityTarget('fast@latest'),{effort:'fast@latest'});
+ assert.deepEqual(perplexityTarget('openai/some-model'),{model:'openai/some-model'});
+});
+test('Perplexity Agent API incomplete status is reported as incomplete',async()=>{
+ const r=await generate('perplexity',{model:'sonar',inputRate:null,outputRate:null},{system:'s',user:'u'},{
+  env:{PERPLEXITY_API_KEY:'k'},fetcher:async(url,options)=>{assert.equal(JSON.parse(options.body).effort,'fast');assert.equal(JSON.parse(options.body).model,undefined);return Response.json({status:'incomplete',output:[{type:'message',content:[{type:'output_text',text:'Part'}]}],usage:{input_tokens:5,output_tokens:10}});}
+ });
+ assert.equal(r.incomplete,true);assert.equal(r.text,'Part');assert.equal(r.costEstimate,null);
 });

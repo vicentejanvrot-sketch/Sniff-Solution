@@ -86,7 +86,7 @@ async function fixture(t,{reader,fetcher,enabled='marketing',keys=true}={}){
  const dir=await mkdtemp(path.join(tmpdir(),'sniff-brand-'));
  const env={ENABLED_MODULES:enabled,...(keys?{PERPLEXITY_API_KEY:'test-brand-secret'}:{})};
  const app=await createApp({dir,env,websiteReader:reader||((url)=>collectWebsite(url,{reader:fixtureReader})),fetcher:fetcher||(async(url,options)=>{
-  const prompt=JSON.parse(JSON.parse(options.body).messages[1].content);
+  const prompt=JSON.parse(JSON.parse(options.body).input);
   return Response.json(providerResponse(modelSuggestions(prompt.websiteEvidence)));
  })});
  await new Promise(resolve=>app.server.listen(0,'127.0.0.1',resolve));
@@ -134,7 +134,7 @@ test('website failure makes no paid call and releases its reservation',async t=>
  assert.equal(job.status,'failed');assert.equal(job.reconciledCost,0);assert.equal(calls,0);assert.equal(store.read().brands.length,0);
 });
 test('invalid AI output is not successful and retains usage for billing review',async t=>{
- const {request,done,store}=await fixture(t,{fetcher:async()=>Response.json({choices:[{message:{content:'not JSON'},finish_reason:'stop'}],usage:{prompt_tokens:40,completion_tokens:20}})});
+ const {request,done,store}=await fixture(t,{fetcher:async()=>Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'not JSON'}]}],usage:{input_tokens:40,output_tokens:20}})});
  const start=await request('/api/brand-research','POST',{name:'Example',website:'example.com'});
  const job=await done(start.body.id);assert.equal(job.status,'failed');assert.equal(job.tokens.input,40);assert.equal(store.read().brands.length,0);
 });
@@ -146,4 +146,9 @@ test('website DNS timeout ends analysis before any transport request',async()=>{
  try{await assert.rejects(readPublicResource('https://example.com',{signal:controller.signal,lookup:()=>new Promise(()=>{}),requestImpl:()=>{requests++;}}),/DNS deadline/);}
  finally{clearTimeout(timer);}
  assert.equal(requests,0);
+});
+test('research parsing tolerates text or citation markers around the JSON object',()=>{
+ const evidence={styling:{colors:[{value:'#112233'}],fonts:[{value:'Inter'}]},warnings:[],pages:[],sources:[],capturedAt:'t',finalUrl:'https://example.com/'};
+ const r=parseResearch('Here are the suggestions [1]:\n{"palette":["#112233"],"font":"Inter","voice":"Warm","audience":"Travellers","goals":"Grow bookings","allowedClaims":[],"prohibitedClaims":[]}\n[1]',evidence);
+ assert.equal(r.suggestions.voice,'Warm');assert.equal(r.suggestions.palette,'#112233');
 });
