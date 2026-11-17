@@ -21,10 +21,10 @@ const path=require('node:path');
   await page.goto('http://127.0.0.1:'+app.server.address().port);
   await page.getByRole('heading',{name:'A little focus. A lot of possibility.'}).waitFor();
   await page.getByRole('heading',{name:'Recent activity'}).waitFor();
-  assert.equal(await page.locator('#app-version').textContent(),'v0.2.2');
+  assert.equal(await page.locator('#app-version').textContent(),'v0.2.3');
   await page.locator('nav').getByRole('button',{name:'Brand Studio',exact:true}).click();
   await page.getByRole('button',{name:'+ Add brand',exact:true}).click();
-  assert.equal(await page.locator('#dialog-version').textContent(),'v0.2.2');
+  assert.equal(await page.locator('#dialog-version').textContent(),'v0.2.3');
   await page.getByRole('button',{name:'Suggest from website',exact:false}).waitFor();
   await page.getByLabel('Brand name',{exact:true}).fill('Travel One QA');
   await page.getByLabel('Tone of voice',{exact:true}).fill('Friendly, practical, clear.');
@@ -99,6 +99,13 @@ const path=require('node:path');
   await page.getByLabel('Output format',{exact:true}).selectOption('4:5');
   await page.getByLabel('Apply approved brand overlays',{exact:true}).check();
   await page.getByLabel('Approved logo',{exact:true}).selectOption(source.id);
+  if(process.platform==='win32'){
+   const fonts=page.getByLabel('Rendering font',{exact:true}).locator('optgroup[label="Installed on this PC"] option');assert.ok(await fonts.count()>6,'Installed Windows fonts should populate the dropdown');
+   const selected=await fonts.first().getAttribute('value');await page.getByLabel('Rendering font',{exact:true}).selectOption(selected);
+   await page.getByRole('button',{name:'Refresh installed fonts',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#font-status').textContent.includes('installed fonts found'));
+   assert.equal(await page.getByLabel('Rendering font',{exact:true}).inputValue(),selected,'Refreshing fonts must retain the selection');
+   assert.equal(await page.getByLabel('Working title',{exact:true}).inputValue(),'Branded portrait QA');assert.equal(await page.getByLabel('Approved logo',{exact:true}).inputValue(),source.id);
+  }
   await page.getByRole('button',{name:'Start production',exact:true}).click();
   await page.getByRole('button',{name:'Review assets',exact:true}).waitFor();
   await page.getByRole('button',{name:'Review assets',exact:true}).click();

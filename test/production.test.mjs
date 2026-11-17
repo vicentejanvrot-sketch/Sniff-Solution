@@ -125,3 +125,12 @@ test('existing PNG, JPEG and WebP render through HTTP into every exact output fo
  }
  assert.equal(calls,0);
 });
+test('installed font selection and refresh use catalog IDs without exposing local font paths',async t=>{
+ const catalog=[{id:'local-font',name:'Local font',family:'Local font',style:'Regular',location:'User fonts',file:'private-font-directory/client.ttf',root:'private-font-directory'}];
+ const f=await fixture(t,{fontCatalogProvider:async({refresh=false}={})=>refresh?[...catalog,{...catalog[0],id:'new-font',name:'New font'}]:catalog});
+ const first=(await f.request('/api/state')).body;assert.equal(first.production.fonts.length,1);assert.ok(!JSON.stringify(first).includes('private-font-directory'));
+ const invalid=await f.request('/api/production','POST',{kind:'image',brandId:'brand',prompt:'Test',branding:true,fontId:'system:../../secret'});assert.equal(invalid.status,409);assert.equal(f.store.read().jobs.length,0);
+ await writeFile(path.join(f.dir,'uploads','font-source'),png);await f.store.update(s=>s.media.push({id:'font-source',file:'font-source',brandId:'brand',mime:'image/png',name:'Source'}));
+ const q=await f.request('/api/production','POST',{kind:'render',brandId:'brand',sourceId:'font-source',branding:true,fontId:'system:local-font'});assert.equal(q.status,202);const {job,state}=await f.done(q.body.id);assert.equal(job.status,'completed');assert.equal(job.production.systemFontName,'Local font');assert.equal(state.media.find(m=>m.role==='rendered').renderingFont,'Local font');assert.ok(!JSON.stringify(state).includes('private-font-directory'));
+ const refreshed=await f.request('/api/fonts/refresh','POST',{});assert.equal(refreshed.status,200);assert.equal(refreshed.body.length,2);assert.ok(!JSON.stringify(refreshed.body).includes('private-font-directory'));
+});

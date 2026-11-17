@@ -1,8 +1,8 @@
-# Phase 2 — Content Production (0.2.2)
+# Phase 2 — Content Production (0.2.3)
 
 ## Update
 
-Quit Sniff Solution from its tray icon. Extract the complete Windows app ZIP over the intended app folder. Run START_SNIFF.cmd there and confirm v0.2.2. Existing configuration and records are preserved. Windows packages include Node, Python, FFmpeg and FFprobe; source archives do not.
+Quit Sniff Solution from its tray icon. Extract the complete Windows app ZIP over the intended app folder. Run START_SNIFF.cmd there and confirm v0.2.3. Existing configuration and records are preserved. Windows packages include Node, Python, FFmpeg and FFprobe; source archives do not.
 
 ## Configure securely
 
@@ -68,3 +68,13 @@ Open Media Library and scroll through image cards. Each image should display a s
 Select a brand in the studio form, choose Render an existing image and select a source. The title fills automatically if empty. Choose the format and read Finished output for the exact target dimensions. Fit keeps the entire source with padding; Fill crops its edges. Local rendering does not use the creative brief or change the pictured scene. Use Generate / edit images with a reference for AI scene edits.
 
 After completion in Activity, select Review assets. The result opens directly. Check the pixel dimensions below the image, its actual visible proportions and Download asset. Batch requests have an Output from this request selector. Expected PNG sizes: 1:1 = 1080×1080; 4:5 = 1080×1350; 9:16 = 1080×1920; 16:9 = 1920×1080. Tests verify real downloaded PNG bytes for all four formats from PNG/JPEG/WebP sources, plus the browser rendering/review/download flow.
+
+## Installed Windows fonts (0.2.3)
+
+1. Open Image Studio or Video Studio, select your brand, and open Rendering font. Installed on this PC lists fonts from C:\Windows\Fonts (or your configured Windows directory) and %LOCALAPPDATA%\Microsoft\Windows\Fonts. Supported files are TTF, OTF and TTC; collections expose their first face and variable fonts use the default instance.
+2. Select a font, choose an image and approved logo, enable brand overlays, and render. No font upload is required. Review the output and Font label to confirm the choice. The font affects extra brand text; it does not alter the lettering inside the approved logo PNG.
+3. Install another font using Windows, then select Refresh installed fonts. Your brief, title and asset choices should remain.
+4. Approved uploaded TTF/OTF files remain listed under Approved uploaded fonts for the selected brand.
+5. Installed font names/IDs are exposed to the local UI, but local paths and font file bytes are not. The font is copied to a temporary local render folder and removed after rendering. Fonts are not bundled into the app distribution or uploaded to AI providers. If a font is removed before a queued job renders, the job reports that it is unavailable.
+
+Windows verification includes discovery of real fonts and a branded render using a font outside the previous six-font whitelist. Automated tests cover malformed files, stable IDs, private paths and rejection of unknown font selections.
