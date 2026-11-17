@@ -1,29 +1,40 @@
 SNIFF SOLUTION - COMPLETE APP FOLDER
 
-1. Quit Sniff Solution using its tray icon beside the Windows clock.
-   Closing only the browser is not enough.
-2. Extract ALL files from this ZIP into your existing Sniff app folder.
+This ZIP is the complete runnable Windows app: SniffSolution.exe,
+START_SNIFF.cmd, all app files, and bundled Node.js and Python.
+VERSION.txt and build-info.json show its version and source commit.
+(GitHub "Code > Download ZIP" / "Source code" archives are NOT this app.)
+
+UPDATE
+1. Quit Sniff Solution: right-click its tray icon beside the Windows clock
+   and choose "Quit Sniff Solution". Closing the browser is not enough.
+2. Extract ALL files from this ZIP into your Sniff app folder.
    Choose Replace when Windows asks about existing application files.
-3. Run START_SNIFF.cmd once from that folder.
-   It updates the desktop/Start menu shortcuts to THIS copy and opens the app.
-4. Check the version shown in the app. This package is version 0.1.2.
-5. In Brand Studio > Add brand, enter a name and website.
-   The Suggest from website button appears immediately below those fields.
+3. Run START_SNIFF.cmd from that same folder. It points the desktop and
+   Start menu shortcuts at THIS folder, lists any other Sniff copy that is
+   running or installed, and opens the app.
+4. Confirm the version badge (top right, and next to "Create a brand")
+   matches VERSION.txt. In Brand Studio > Add brand, "Suggest from website"
+   appears right below the Brand name and Website fields.
 
-This is a complete application folder, including the Windows launcher,
-all current app code, Node.js and Python. No separate runtime installation
-or setup executable is required.
+IF AN OLDER COPY IS STILL RUNNING
+Opening this copy while another copy or version is running in the tray
+shows both folders and versions and offers to close the running copy.
+Its server finishes any request in progress first. Settings and records
+are kept. It never closes other Node.js programs.
 
-Existing records and API settings in %LOCALAPPDATA%\SniffSolution are retained.
-The ZIP includes only an empty .env.example template; it does not include an
-.env file or user-data folders, so these are not overwritten.
+OLDER INSTALLED COPY
+If you once used the setup installer, a copy may remain in
+%LOCALAPPDATA%\Programs\Sniff Solution. START_SNIFF.cmd repoints your
+shortcuts away from it. You may uninstall it from Windows Settings > Apps;
+your data is kept.
 
-If you were running source code from another folder, its local .data and .env
-files are preserved when copying these files. They are not automatically
-imported into the desktop launcher's %LOCALAPPDATA%\SniffSolution data folder.
-Do not delete either location if you have records in both.
+YOUR DATA
+Records, API settings (.env) and logs stay in %LOCALAPPDATA%\SniffSolution.
+The ZIP contains only an empty .env.example; it has no .env or user data,
+so extracting it never overwrites them. A .env or .data folder inside a
+source-code folder is separate and is not imported automatically.
 
-For AI suggestions, a provider key and model must be configured. Automatic
-selection prefers Perplexity. Suggested content remains editable before Save.
-
-Future updates will be delivered as a complete ZIP using this same layout.
+For AI suggestions, a provider key and model must be configured (tray menu >
+Edit API settings, then Settings & Costs). Suggestions stay editable and
+nothing is saved until you choose Save brand.

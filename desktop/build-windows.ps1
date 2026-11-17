@@ -50,17 +50,32 @@ if(!(Test-Path $csc)){throw '.NET C# compiler is missing.'}
 $cscArgs=@('/nologo','/target:winexe','/platform:x64','/optimize+',"/out:$(Join-Path $stage 'SniffSolution.exe')","/win32icon:$iconPath",'/reference:System.dll','/reference:System.Core.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll','/reference:System.Web.Extensions.dll',(Join-Path $PSScriptRoot 'Launcher.cs'))
 & $csc @cscArgs
 if($LASTEXITCODE -ne 0){throw 'Launcher compilation failed.'}
-$metadata=[ordered]@{application='Sniff Solution';version='0.1.2';source_commit=$env:GITHUB_SHA;node_version=$nodeVersion;node_sha256=(Get-FileHash (Join-Path $stage 'runtime\node.exe') -Algorithm SHA256).Hash.ToLowerInvariant();python_version=$pythonVersion;python_archive_sha256=$pythonHash;platform='Windows x64';code_signed=$false}
+$commit=$env:GITHUB_SHA
+if([string]::IsNullOrWhiteSpace($commit)){$commit=(& git -C $root rev-parse HEAD).Trim()}
+if($commit -notmatch '^[0-9a-f]{40}$'){throw 'The source commit could not be determined.'}
+$metadata=[ordered]@{application='Sniff Solution';version=$version;source_commit=$commit;built_at=(Get-Date).ToUniversalTime().ToString('o');node_version=$nodeVersion;node_sha256=(Get-FileHash (Join-Path $stage 'runtime\node.exe') -Algorithm SHA256).Hash.ToLowerInvariant();python_version=$pythonVersion;python_archive_sha256=$pythonHash;platform='Windows x64';code_signed=$false}
 $metadata | ConvertTo-Json | Set-Content (Join-Path $stage 'build-info.json') -Encoding utf8
 $iscc=Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Inno Setup 6\ISCC.exe'
 if(!(Test-Path $iscc)){throw 'Inno Setup 6 is missing.'}
-& $iscc "/DStageDir=$stage" "/DOutputDirPath=$output" '/DAppVersion=0.1.2' (Join-Path $PSScriptRoot 'installer.iss')
+& $iscc "/DStageDir=$stage" "/DOutputDirPath=$output" "/DAppVersion=$version" (Join-Path $PSScriptRoot 'installer.iss')
 if($LASTEXITCODE -ne 0){throw 'Installer compilation failed.'}
-$installer=Join-Path $output 'Sniff-Solution-Setup-0.1.2-x64.exe'
+$installer=Join-Path $output "Sniff-Solution-Setup-$version-x64.exe"
 if(!(Test-Path $installer)){throw 'Installer output is missing.'}
 $hash=(Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  Sniff-Solution-Setup-0.1.2-x64.exe" | Set-Content (Join-Path $output 'SHA256SUMS.txt') -Encoding ascii
+"$hash  Sniff-Solution-Setup-$version-x64.exe" | Set-Content (Join-Path $output 'SHA256SUMS.txt') -Encoding ascii
 Copy-Item (Join-Path $PSScriptRoot 'INSTALL.txt') $output
 Copy-Item (Join-Path $stage 'build-info.json') $output
+# Complete runnable app ZIP (flat layout: extract over the app folder). This is the main download.
+$release=Join-Path $build 'release'
+if(Test-Path $release){Remove-Item $release -Recurse -Force}
+New-Item $release -ItemType Directory -Force | Out-Null
+$short=$commit.Substring(0,7)
+$fullZip=Join-Path $release "Sniff-Solution-Windows-Full-App-$version-$short.zip"
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($stage,$fullZip,[System.IO.Compression.CompressionLevel]::Optimal,$false)
+$zipHash=(Get-FileHash $fullZip -Algorithm SHA256).Hash.ToLowerInvariant()
+"$zipHash  $(Split-Path $fullZip -Leaf)" | Set-Content (Join-Path $release 'SHA256SUMS.txt') -Encoding ascii
+Copy-Item (Join-Path $stage 'build-info.json') $release
 Write-Host "Installer built: $installer"
+Write-Host "Complete app ZIP built: $fullZip"
 

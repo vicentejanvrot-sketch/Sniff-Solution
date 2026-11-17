@@ -1,9 +1,9 @@
 SNIFF SOLUTION - WINDOWS DESKTOP INSTALLER
-Version 0.1.2 - Windows 10/11 x64
+Windows 10/11 x64 (version: see VERSION.txt)
 
 INSTALL
 1. Extract this downloaded ZIP.
-2. Double-click Sniff-Solution-Setup-0.1.2-x64.exe.
+2. Double-click the Sniff-Solution-Setup-<version>-x64.exe file.
 3. Follow the installer. It creates desktop and Start menu shortcuts.
 4. Double-click "Sniff Solution" on your desktop.
 

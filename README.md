@@ -4,15 +4,17 @@ A single-developer AI Marketing Studio: brand profiles, thirteen Instagram conte
 
 ## Complete ZIP updates (preferred)
 
-Every change is delivered as a **complete ready-to-run app ZIP**, including all current source files, the Windows launcher, Node.js and Python. Download **Sniff-Solution-Full-App-0.1.2** from the successful Windows build, quit the existing app from its tray icon, and extract all files over the existing application folder. Then run **START_SNIFF.cmd** once. It repoints the desktop/Start menu shortcuts to that exact folder and launches the new copy.
+Every change is delivered as a **complete ready-to-run app ZIP**, including all current source files, the Windows launcher, Node.js and Python. Each push to `main` publishes it on the [latest GitHub Release](../../releases/latest) as **Sniff-Solution-Windows-Full-App-&lt;version&gt;-&lt;commit&gt;.zip** (also as `Sniff-Solution-Windows-Full-App.zip`). The same ZIP is attached to the Windows workflow run as a fallback artifact; artifacts need a GitHub sign-in and expire after 90 days. GitHub's **Code › Download ZIP** and the release's **Source code** archives are source only, not the runnable app.
 
-The current version is shown in the app and in VERSION.txt. If updated browser files are served by an older running server, the UI asks you to quit and restart. Application files alone cannot replace code already running in memory.
+Quit the existing app from its tray icon, extract all files over your app folder, then run **START_SNIFF.cmd** once. It repoints the desktop/Start menu shortcuts to that exact folder, reports any other running or installed Sniff copy, and launches the new copy.
+
+The version is shown in the header, the sidebar (with the build commit) and the **Create a brand** dialog, and in VERSION.txt/build-info.json. If you open a copy while a different copy or version is still running in the tray, SniffSolution.exe names both folders and versions and offers to close the running copy (its server finishes in-flight work first); it never reopens the old one silently. Application files alone cannot replace code already running in memory.
 
 The ZIP never includes a real .env or user-data directory. Existing files in the target folder remain untouched unless they are application files of the same name. Desktop data/configuration remain in %LOCALAPPDATA%\SniffSolution. Existing source-checkout .env/.data files are preserved, but they are not silently imported into the desktop profile.
 
 ## Windows desktop installer
 
-The [Windows installer workflow](../../actions/workflows/windows-desktop.yml) builds a per-user setup executable with desktop and Start menu shortcuts. Download **Sniff-Solution-Windows-Installer** from a successful run's Artifacts section, extract it and run **Sniff-Solution-Setup-0.1.2-x64.exe**.
+The [Windows installer workflow](../../actions/workflows/windows-desktop.yml) builds a per-user setup executable with desktop and Start menu shortcuts. The setup executable is also attached to each GitHub Release. It installs to %LOCALAPPDATA%\Programs\Sniff Solution. Use either the installer or the complete ZIP folder, not both: an old installed copy keeps its own files until it is updated or uninstalled.
 
 Node.js and Python are bundled. The shortcut starts a hidden local server and opens the app in your normal browser. Its tray menu can reopen the app, edit API settings, open the data folder and quit. There is no application sign-in.
 

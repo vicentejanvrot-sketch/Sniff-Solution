@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: windows-desktop-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   build-installer:
     runs-on: windows-2022
@@ -28,30 +31,90 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Node tests failed.' }
           python -m unittest discover -s tools -p 'test_*.py'
           if ($LASTEXITCODE -ne 0) { throw 'Python tests failed.' }
-      - name: Build executable and installer
+      - name: Build executable, installer and complete app ZIP
+        id: build
         shell: pwsh
-        run: ./desktop/build-windows.ps1
+        run: |
+          ./desktop/build-windows.ps1
+          $version=(Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "short=$($env:GITHUB_SHA.Substring(0,7))" >> $env:GITHUB_OUTPUT
       - name: Verify installed application
         shell: pwsh
         run: ./desktop/test-installer.ps1
       - name: Verify complete app folder and overwrite updates
         shell: pwsh
         run: ./desktop/test-full-app.ps1
-      - name: Downloadable Windows installer
+      - name: Complete app ZIP (GitHub artifact fallback)
         uses: actions/upload-artifact@v4
         with:
-          name: Sniff-Solution-Windows-Installer
+          name: Sniff-Solution-Windows-Full-App-${{ steps.build.outputs.version }}-${{ steps.build.outputs.short }}
+          path: build/release/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+      - name: Optional Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sniff-Solution-Windows-Installer-${{ steps.build.outputs.version }}-${{ steps.build.outputs.short }}
           path: build/output/*
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
+    outputs:
+      version: ${{ steps.build.outputs.version }}
+      short: ${{ steps.build.outputs.short }}
 
-      - name: Complete app ZIP for overwrite updates
-        uses: actions/upload-artifact@v4
+  publish-release:
+    # Stable, versioned download that does not expire or require sign-in (public repository).
+    needs: build-installer
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          name: Sniff-Solution-Full-App-0.1.2
-          path: build/stage/
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 90
-          compression-level: 6
+          name: Sniff-Solution-Windows-Full-App-${{ needs.build-installer.outputs.version }}-${{ needs.build-installer.outputs.short }}
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: Sniff-Solution-Windows-Installer-${{ needs.build-installer.outputs.version }}-${{ needs.build-installer.outputs.short }}
+          path: installer
+      - name: Verify release files identify this main commit
+        env:
+          VERSION: ${{ needs.build-installer.outputs.version }}
+          SHORT: ${{ needs.build-installer.outputs.short }}
+        run: |
+          set -euo pipefail
+          zip="release/Sniff-Solution-Windows-Full-App-${VERSION}-${SHORT}.zip"
+          test -f "$zip"
+          (cd release && sha256sum -c SHA256SUMS.txt)
+          unzip -p "$zip" build-info.json | python3 -c "import json,os,sys; d=json.loads(sys.stdin.read().lstrip('\ufeff')); assert d['version']==os.environ['VERSION'], d; assert d['source_commit']==os.environ['GITHUB_SHA'], d; print('build-info OK', d['version'], d['source_commit'])"
+          unzip -p "$zip" VERSION.txt | grep -qx "${VERSION}"
+          unzip -p "$zip" public/app.js | grep -q 'Suggest from website'
+          unzip -p "$zip" public/app.js | grep -q 'dialog-version'
+          if unzip -Z1 "$zip" | grep -Ei '(^|/)\.env$|(^|/)\.data/'; then echo 'Private files found in ZIP'; exit 1; fi
+          for f in SniffSolution.exe START_SNIFF.cmd runtime/node.exe runtime/python/python.exe server.mjs; do unzip -Z1 "$zip" | grep -qx "$f"; done
+          cp "$zip" release/Sniff-Solution-Windows-Full-App.zip
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build-installer.outputs.version }}
+          SHORT: ${{ needs.build-installer.outputs.short }}
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}-${SHORT}"
+          notes="Complete Windows app for Sniff Solution ${VERSION}, built from main commit ${GITHUB_SHA}.
+
+          Download Sniff-Solution-Windows-Full-App-${VERSION}-${SHORT}.zip (or the same file as Sniff-Solution-Windows-Full-App.zip). It contains SniffSolution.exe, START_SNIFF.cmd, all app files and bundled Node.js and Python. GitHub's Source code archives below are NOT the runnable app.
+
+          Update: quit Sniff Solution from its tray icon, extract all files over your app folder, run START_SNIFF.cmd from that folder, and confirm the app shows v${VERSION}. See UPDATE_README.txt inside the ZIP."
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" release/*.zip release/SHA256SUMS.txt release/build-info.json installer/*.exe --clobber -R "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" release/*.zip release/SHA256SUMS.txt release/build-info.json installer/*.exe \
+              -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Sniff Solution ${VERSION} (build ${SHORT})" --notes "$notes" --latest
+          fi
