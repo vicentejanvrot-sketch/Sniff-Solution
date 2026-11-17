@@ -33,18 +33,8 @@ internal static class Program
         {
             if (!created)
             {
-                for (int i = 0; i < 30; i++)
-                {
-                    try
-                    {
-                        string url = File.ReadAllText(Path.Combine(Home, "desktop.url")).Trim();
-                        if (ValidUrl(url)) { OpenUrl(url); return 0; }
-                    }
-                    catch (IOException) {}
-                    Thread.Sleep(200);
-                }
-                if (!Smoke) MessageBox.Show("Sniff Solution is already starting or closing. Try the tray icon in a moment.", "Sniff Solution");
-                return 1;
+                int handled = Instances.HandleRunningCopy(mutex);
+                if (handled != Instances.StartThisCopy) return handled;
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -77,6 +67,139 @@ internal static class Program
         }
     }
     internal static string Quote(string value) { return "\"" + value.Replace("\"", "\\\"") + "\""; }
+}
+
+// Handles a second launch while another Sniff tray copy holds the single-instance mutex.
+// An older copy (another folder, or files replaced while it was running) must never be
+// reopened silently: that is how an update could keep showing the old interface.
+internal static class Instances
+{
+    internal const int StartThisCopy = -1;
+
+    internal static string Version(string root)
+    {
+        try
+        {
+            var package = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(root, "package.json")));
+            return package.ContainsKey("version") ? Convert.ToString(package["version"]) : "unknown";
+        }
+        catch (Exception) { return "unknown"; }
+    }
+
+    private static string RunningUrl()
+    {
+        for (int i = 0; i < 30; i++)
+        {
+            try
+            {
+                string url = File.ReadAllText(Path.Combine(Program.Home, "desktop.url")).Trim();
+                if (Program.ValidUrl(url)) return url;
+            }
+            catch (IOException) {}
+            Thread.Sleep(200);
+        }
+        return null;
+    }
+
+    private static string RunningVersion(string url)
+    {
+        try
+        {
+            using (var client = new WebClient())
+            {
+                client.Headers["X-Sniff-Client"] = "1";
+                var state = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(client.DownloadString(url + "api/state"));
+                // Versions before 0.1.2 did not report appVersion.
+                return state.ContainsKey("appVersion") ? Convert.ToString(state["appVersion"]) : "0.1.1 or older";
+            }
+        }
+        catch (Exception) { return null; }
+    }
+
+    internal static List<Process> OtherLaunchers()
+    {
+        int self = Process.GetCurrentProcess().Id;
+        return Process.GetProcessesByName("SniffSolution").Where(p => p.Id != self).ToList();
+    }
+
+    internal static string ExePath(Process process)
+    {
+        try { return process.MainModule.FileName; } catch (Exception) { return null; }
+    }
+
+    internal static int HandleRunningCopy(Mutex mutex)
+    {
+        string ourExe = Path.GetFullPath(Application.ExecutablePath);
+        string ourVersion = Version(AppDomain.CurrentDomain.BaseDirectory);
+        string url = RunningUrl();
+        string runningVersion = url == null ? null : RunningVersion(url);
+        var others = OtherLaunchers();
+        var paths = others.Select(ExePath).Where(x => x != null).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        bool sameFolder = paths.Count > 0 && paths.All(x => String.Equals(Path.GetFullPath(x), ourExe, StringComparison.OrdinalIgnoreCase));
+        if (url != null && runningVersion == ourVersion && (sameFolder || paths.Count == 0))
+        {
+            Program.OpenUrl(url);
+            return 0;
+        }
+        string where = paths.Count > 0 ? String.Join("\n", paths.Select(x => Path.GetDirectoryName(x))) : "unknown folder";
+        Program.Log("Second launch from " + ourExe + " (v" + ourVersion + ") found running copy v" + (runningVersion ?? "unknown") + " in " + where.Replace("\n", "; "));
+        if (Program.Smoke) return 1;
+        if (others.Count == 0)
+        {
+            MessageBox.Show("Sniff Solution is already starting or closing. Try again in a moment.", "Sniff Solution");
+            return 1;
+        }
+        string message = "Another copy of Sniff Solution is still running in the tray, so this copy cannot start yet.\n\n"
+            + "Running: version " + (runningVersion ?? "unknown") + "\n" + where + "\n\n"
+            + "This copy: version " + ourVersion + "\n" + Path.GetDirectoryName(ourExe) + "\n\n"
+            + "Close the running copy and start this one?\n"
+            + "Its server finishes any request in progress before stopping. Your settings and records are kept.";
+        if (MessageBox.Show(message, "Sniff Solution - older copy running", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            return 1;
+        // Only Sniff Solution launchers are closed, never other Node processes. Closing a launcher
+        // closes its server's input, which makes the server finish work and shut down cleanly.
+        foreach (var process in others)
+        {
+            try { Program.Log("Closing running launcher " + (ExePath(process) ?? process.Id.ToString())); process.Kill(); }
+            catch (Exception ex) { Program.Log("Could not close launcher: " + ex.Message); }
+        }
+        bool acquired;
+        try { acquired = mutex.WaitOne(30000); }
+        catch (AbandonedMutexException) { acquired = true; }
+        if (!acquired)
+        {
+            MessageBox.Show("The running copy did not close. Quit it from its tray icon, then open Sniff Solution again.", "Sniff Solution");
+            return 1;
+        }
+        if (!WaitForServerExit())
+        {
+            MessageBox.Show("The previous Sniff server is still finishing a request. Wait a minute, then open Sniff Solution again.", "Sniff Solution");
+            mutex.ReleaseMutex();
+            return 1;
+        }
+        return StartThisCopy;
+    }
+
+    private static bool WaitForServerExit()
+    {
+        string owner = Path.Combine(Program.Home, "desktop-owner.json");
+        for (int i = 0; i < 1200; i++) // up to 4 minutes, matching the tray shutdown allowance
+        {
+            int pid = 0;
+            try
+            {
+                if (!File.Exists(owner)) return true;
+                var record = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(owner));
+                pid = Convert.ToInt32(record["pid"]);
+            }
+            catch (IOException) { Thread.Sleep(200); continue; }
+            catch (Exception) { return true; } // An unreadable record is reported by the server runner itself.
+            try { using (var p = Process.GetProcessById(pid)) { if (p.HasExited) return true; } }
+            catch (ArgumentException) { return true; }
+            Thread.Sleep(200);
+        }
+        return false;
+    }
 }
 
 internal sealed class DesktopContext : ApplicationContext

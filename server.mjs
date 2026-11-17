@@ -18,6 +18,7 @@ async function jsonBody(req){try{return JSON.parse((await body(req)).toString('u
 const json=(res,data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));};
 export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetcher=fetch,websiteReader=collectWebsite}={}){
  const appVersion=JSON.parse(await readFile(path.join(root,'package.json'),'utf8')).version;
+ let sourceCommit='';try{const info=JSON.parse((await readFile(path.join(root,'build-info.json'),'utf8')).replace(/^\uFEFF/,''));if(/^[0-9a-f]{40}$/.test(info.source_commit||''))sourceCommit=info.source_commit;}catch(e){if(e.code!=='ENOENT'&&!(e instanceof SyntaxError))throw e;}
  const store=await new Store({dir,mode:env.STORAGE_MODE||'local',url:env.SUPABASE_URL||'',key:env.SUPABASE_SECRET_KEY||'',workspace:env.WORKSPACE_ID||'developer',fetcher}).init();
  const enabled=new Set((env.ENABLED_MODULES||'marketing').split(',').map(x=>x.trim()));
  const ready=providerStatus(env);
@@ -74,7 +75,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    }
   }finally{working=false;}
  }
- function publicState(){const s=store.read();return {...s,skills,modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,build:'Phase 1 · v'+appVersion+' · developer workspace'};}
+ function publicState(){const s=store.read();return {...s,skills,modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 1 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
  const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Cache-Control','no-store');

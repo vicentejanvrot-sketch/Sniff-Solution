@@ -11,9 +11,23 @@ New-Item (Join-Path $appDir 'public'),(Join-Path $appDir '.data') -ItemType Dire
 'old application file' | Set-Content (Join-Path $appDir 'public\app.js')
 'KEEP_MY_EXISTING_CONFIGURATION=yes' | Set-Content (Join-Path $appDir '.env')
 'keep my local records' | Set-Content (Join-Path $appDir '.data\keep.txt')
-if(Test-Path (Join-Path $stage '.env')){throw 'Full package must not contain a user .env.'}
-if(Test-Path (Join-Path $stage '.data')){throw 'Full package must not contain a user-data directory.'}
-Copy-Item (Join-Path $stage '*') $appDir -Recurse -Force
+# Verify the actual release ZIP that users download, not just the staging folder.
+$zips=@(Get-ChildItem (Join-Path $root 'build\release') -Filter 'Sniff-Solution-Windows-Full-App-*.zip')
+if($zips.Count -ne 1){throw 'Expected exactly one complete app ZIP.'}
+$zip=$zips[0].FullName
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive=[System.IO.Compression.ZipFile]::OpenRead($zip)
+try{
+ $names=@($archive.Entries | ForEach-Object { $_.FullName.Replace('\','/') })
+ foreach($name in $names){
+  if($name -match '(^|/)\.env$' -or $name -match '(^|/)\.data/' -or $name -match '(^|/)(desktop\.url|desktop-owner\.json|workspace\.json)$'){throw "Complete ZIP contains private or user data: $name"}
+ }
+ foreach($required in @('SniffSolution.exe','START_SNIFF.cmd','VERSION.txt','build-info.json','package.json','runtime/node.exe','runtime/python/python.exe','public/app.js','desktop/server-runner.mjs')){
+  if($names -notcontains $required){throw "Complete ZIP is missing $required at its top level."}
+ }
+}finally{$archive.Dispose()}
+Write-Host "Complete ZIP entries: $($names.Count)"
+Expand-Archive $zip $appDir -Force
 foreach($file in @('SniffSolution.exe','START_SNIFF.cmd','UPDATE_README.txt','VERSION.txt','.env.example','runtime\node.exe','runtime\python\python.exe','server.mjs','lib\website.mjs','lib\brand-research.mjs','public\app.js','desktop\create-shortcuts.ps1')){
  if(!(Test-Path (Join-Path $appDir $file))){throw "Complete package is missing $file."}
 }
@@ -38,7 +52,16 @@ $shell=New-Object -ComObject WScript.Shell
 $desktop=[Environment]::GetFolderPath('DesktopDirectory')
 $link=$shell.CreateShortcut((Join-Path $desktop 'Sniff Solution.lnk'))
 if($link.TargetPath -ne (Join-Path $appDir 'SniffSolution.exe')){throw 'Shortcut still points to an older app folder.'}
-$expectedVersion=(Get-Content (Join-Path $appDir 'package.json') -Raw | ConvertFrom-Json).version
+$expectedVersion=(Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json).version
+if((Get-Content (Join-Path $appDir 'package.json') -Raw | ConvertFrom-Json).version -ne $expectedVersion){throw 'Packaged package.json version is incorrect.'}
 if((Get-Content (Join-Path $appDir 'VERSION.txt') -Raw).Trim() -ne $expectedVersion){throw 'Visible package version is incorrect.'}
+$info=Get-Content (Join-Path $appDir 'build-info.json') -Raw | ConvertFrom-Json
+if($info.version -ne $expectedVersion){throw 'build-info.json version is incorrect.'}
+$expectedCommit=$env:GITHUB_SHA
+if([string]::IsNullOrWhiteSpace($expectedCommit)){$expectedCommit=(& git -C $root rev-parse HEAD).Trim()}
+if($info.source_commit -ne $expectedCommit){throw "build-info.json commit $($info.source_commit) does not match $expectedCommit."}
+if((Split-Path $zip -Leaf) -ne "Sniff-Solution-Windows-Full-App-$expectedVersion-$($expectedCommit.Substring(0,7)).zip"){throw 'ZIP name does not identify the version and commit.'}
+if(!(Select-String -Path (Join-Path $appDir 'public\app.js') -SimpleMatch 'dialog-version')){throw 'Brand dialog version badge is missing.'}
+Write-Host "Verified version $expectedVersion from commit $expectedCommit
 Write-Host 'Full app ZIP verified: all sources/runtimes, latest website button, standalone launcher, current server version, overwrite-safe configuration/data and desktop shortcut pointing at the extracted folder.'
 
