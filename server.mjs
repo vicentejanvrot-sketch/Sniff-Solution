@@ -47,9 +47,10 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
  }
  async function removeMedia(file){if(store.mode==='local')await unlink(path.join(uploads,file));else await mediaRequest('DELETE',file);}
  async function readMedia(m){return store.mode==='local'?readFile(path.join(uploads,m.file)):Buffer.from(await(await mediaRequest('GET',m.file)).arrayBuffer());}
- async function saveProductionMedia(work,result,{sourceId='',role='generated'}={}){
+ async function saveProductionMedia(work,result,{sourceId='',role='generated',imageIndex=1}={}){
   const p=work.production,ext=result.mime==='video/mp4'?'mp4':'png';
   const media={id:id(),brandId:work.brandId,name:work.title+'-'+role+'.'+ext,mime:result.mime,size:result.bytes.length,tags:'production, '+role,createdAt:now(),status:'needs-review',version:1,reviewHistory:[],jobId:work.id,sourceId,draftId:p.draftId,caption:p.caption,role,aspect:p.aspect,width:result.width||null,height:result.height||null,branding:role==='rendered'&&p.branding,brandSnapshot:p.brandSnapshot};media.file=media.id;
+  media.imageIndex=imageIndex;if(p.count>1)media.name=work.title+'-image-'+imageIndex+'-of-'+p.count+'-'+role+'.'+ext;
   await putMedia(media.file,result.bytes,result.mime);
   try{await store.update(s=>{s.media.unshift(media);const j=s.jobs.find(j=>j.id===work.id);(j.mediaIds||=[]).push(media.id);audit(s,'production.asset_saved',media.id);});}
   catch(e){await removeMedia(media.file).catch(()=>{});throw e;}return media;
@@ -74,12 +75,12 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
        results=[await generateVideo(work,{env,fetcher,downloader:assetDownloader,pollDelay,onPhase:phase,onRequest:requestId=>store.update(s=>{s.jobs.find(j=>j.id===work.id).providerRequestId=requestId;})})];
       }else results=[{bytes:await readMedia(p.sourceSnapshot),mime:p.sourceSnapshot.mime}];
       // Persist every paid batch output before attempting any rendering.
-      const sources=[];for(const result of results)sources.push(p.kind==='render'?p.sourceSnapshot:await saveProductionMedia(work,result,{sourceId:p.sourceId}));
+      const sources=[];for(let i=0;i<results.length;i++)sources.push(p.kind==='render'?p.sourceSnapshot:await saveProductionMedia(work,results[i],{sourceId:p.sourceId,imageIndex:i+1}));
       for(let index=0;index<results.length;index++){
        const result=results[index],source=sources[index];
        await phase('Preparing final dimensions and brand overlays');
        const rendered=await mediaRenderer(result,p,{env,dir:store.dir,readMedia});
-       await saveProductionMedia(work,rendered,{sourceId:source.id,role:'rendered'});
+       await saveProductionMedia(work,rendered,{sourceId:source.id,role:'rendered',imageIndex:index+1});
       }
       await store.update(s=>{const j=s.jobs.find(j=>j.id===work.id);j.status=incomplete?'incomplete':'completed';j.phase='Assets ready for review';j.finishedAt=now();if(incomplete)j.error='Provider returned fewer images than requested. Review the saved assets and provider billing.';if(p.kind==='render'){j.costEstimate=0;j.reconciledCost=0;}audit(s,'production.completed',j.id);});continue;
      }
@@ -134,7 +135,8 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       if(production.kind==='video'&&(!env.HF_API_KEY_ID||!env.HF_API_KEY_SECRET))fail('Configure HF_API_KEY_ID and HF_API_KEY_SECRET in your local settings file.',409);
       if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('The queue is full. Wait for a job to finish.',409);
       const reservation=production.kind==='render'?0:config.reserve*production.count;
-      if(ledger(s).committed+reservation>s.settings.monthlyBudget)fail('The monthly budget has no room for this media reservation.',409);
+      const available=Math.max(0,s.settings.monthlyBudget-ledger(s).committed);
+      if(reservation>available)fail('This request needs a US$'+reservation.toFixed(2)+' planning reservation; US$'+available.toFixed(2)+' remains this month. Reduce the batch size, adjust the media reservation in Settings & Costs, or reconcile previous requests in Activity. No generation was started.',409);
       const j={id:id(),type:'production',skill:production.kind+'-studio',brandId:production.brandSnapshot.id,title:production.title,production,provider:production.kind==='render'?'local':production.kind==='image'?'openai':'higgsfield',config:{model:production.kind==='render'?'FFmpeg':production.kind==='image'?config.imageModel:config.videoModel},status:'queued',phase:'Waiting for media worker',reservation,costEstimate:null,createdAt:now(),mediaIds:[]};s.jobs.push(j);audit(s,'production.queued',j.id);return j;
      });json(res,{id:job.id,status:job.status},202);setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
     }
@@ -283,6 +285,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    if(!['GET','HEAD'].includes(req.method))fail('Method not allowed.',405);
    const staticFiles={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
    staticFiles['/production.js']=['production.js','text/javascript; charset=utf-8'];
+   staticFiles['/dictation.js']=['dictation.js','text/javascript; charset=utf-8'];
    const entry=staticFiles[p];if(!entry)fail('Not found.',404);
    const data=await readFile(path.join(root,'public',entry[0]));res.writeHead(200,{'Content-Type':entry[1]});res.end(req.method==='HEAD'?undefined:data);
   }catch(e){if(!res.headersSent)json(res,{error:e.status?e.message:'Operation failed. Check server configuration and storage availability.'},e.status||500);else res.end();}

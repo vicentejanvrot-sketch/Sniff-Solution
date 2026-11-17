@@ -6,6 +6,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createApp} from '../server.mjs';
 import {generateImages,generateVideo,productionInput,downloadAsset,renderAsset,rendererAvailable,formats} from '../lib/production.mjs';
+import {visibleMedia} from '../public/production.js';
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg==','base64');
 const brand={id:'brand',name:'Travel One',palette:'#163D30',font:'Arial'};
 const fakeRenderer=async(r,p)=>({...r,width:formats[p.aspect][0],height:formats[p.aspect][1]});
@@ -25,6 +26,7 @@ test('image batches preserve originals, render exact formats, hold reservations 
  const {request,done}=await fixture(t,{fetcher:async(url,opts)=>{calls++;assert.equal(url,'https://api.openai.com/v1/images/generations');const b=JSON.parse(opts.body);assert.equal(b.n,2);assert.equal(b.size,'1024x1536');assert.equal(opts.headers.Authorization,'Bearer private-openai');return Response.json({data:[{b64_json:png.toString('base64')},{b64_json:png.toString('base64')}],usage:{total_tokens:100}});}});
  const queued=await request('/api/production','POST',{kind:'image',brandId:'brand',title:'Batch',prompt:'Two coastal scenes',aspect:'4:5',count:2});assert.equal(queued.status,202);
  const {job,state}=await done(queued.body.id);assert.equal(job.status,'completed');assert.equal(calls,1);assert.equal(job.reservation,10);assert.equal(job.costEstimate,null);assert.equal(state.media.length,4);
+ assert.equal(visibleMedia(state.media).length,2);assert.equal(visibleMedia(state.media,true).length,4);assert.equal(new Set(state.media.map(m=>m.name)).size,4);
  const final=state.media.find(m=>m.role==='rendered');assert.equal(final.width,1080);assert.equal(final.height,1350);assert.ok(final.sourceId);assert.equal(final.status,'needs-review');
  const save={version:1,status:'approved',caption:'Approved caption'};assert.equal((await request('/api/media/'+final.id,'PUT',save)).status,200);assert.equal((await request('/api/media/'+final.id,'PUT',save)).status,409);
  assert.equal((await request('/api/media/'+final.sourceId,'DELETE')).status,409);
@@ -34,6 +36,11 @@ test('batch originals survive rendering failure and missing images produce incom
  const f=await fixture(t,{fetcher:async()=>Response.json({data:[{b64_json:png.toString('base64')},{b64_json:png.toString('base64')}]}),mediaRenderer:async()=>{throw new Error('Render failed');}});
  const q=await f.request('/api/production','POST',{kind:'image',brandId:'brand',prompt:'Test',count:2});const {job,state}=await f.done(q.body.id);assert.equal(job.status,'failed');assert.equal(state.media.length,2);assert.ok(state.media.every(m=>m.role==='generated'));
  const g=await fixture(t,{fetcher:async()=>Response.json({data:[{b64_json:png.toString('base64')} ]})});const b=await g.request('/api/production','POST',{kind:'image',brandId:'brand',prompt:'Test',count:2});assert.equal((await g.done(b.body.id)).job.status,'incomplete');
+});
+test('one requested image makes one provider call and shows one final choice, with original recoverable',async t=>{
+ let calls=0;const f=await fixture(t,{fetcher:async(_url,opts)=>{calls++;assert.equal(JSON.parse(opts.body).n,1);return Response.json({data:[{b64_json:png.toString('base64')}]});}});
+ const q=await f.request('/api/production','POST',{kind:'image',brandId:'brand',prompt:'One scene',count:1});const {state}=await f.done(q.body.id);assert.equal(calls,1);assert.equal(state.media.length,2);assert.equal(visibleMedia(state.media).length,1);assert.equal(visibleMedia(state.media,true).length,2);assert.equal(visibleMedia(state.media)[0].role,'rendered');
+ const original=state.media.find(m=>m.role==='generated');assert.deepEqual(visibleMedia([original]),[original],'Unrendered originals must remain visible for recovery');
 });
 test('references use multipart edits, transparent output and no arbitrary remote URLs',async()=>{
  let called=false;
@@ -45,7 +52,7 @@ test('budget, module, provider and shape validation reject work before provider 
  let calls=0;const f=await fixture(t,{fetcher:async()=>{calls++;throw new Error('must not call');}});
  await f.store.update(s=>s.settings.monthlyBudget=5);
  const base={kind:'image',brandId:'brand',prompt:'Test'};
- assert.equal((await f.request('/api/production','POST',{...base,count:2})).status,409);
+ const blocked=await f.request('/api/production','POST',{...base,count:2});assert.equal(blocked.status,409);assert.match(blocked.body.error,/US\$10.00.*US\$5.00/);assert.match(blocked.body.error,/No generation was started/);
  for(const extra of [{count:0},{aspect:'wrong'},{branding:true,color:'red'},{kind:'video',aspect:'4:5'},{kind:'video',duration:300}])assert.equal((await f.request('/api/production','POST',{...base,...extra})).status,400);
  assert.equal(f.store.read().jobs.length,0);assert.equal(calls,0);
  const disabled=await fixture(t,{env:{ENABLED_MODULES:'sniff'}});assert.equal((await disabled.request('/api/production','POST',base)).status,403);

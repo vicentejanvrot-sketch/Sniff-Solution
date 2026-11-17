@@ -99,7 +99,7 @@ jobs:
           test "$(tr -d '\r\n' < check/VERSION.txt)" = "$VERSION"
           grep -c 'Suggest from website' check/public/app.js
           grep -c 'dialog-version' check/public/app.js
-          for f in SniffSolution.exe START_SNIFF.cmd runtime/node.exe runtime/python/python.exe runtime/ffmpeg/ffmpeg.exe runtime/ffmpeg/LICENSE public/production.js lib/production.mjs PHASE2_TEST_GUIDE.md server.mjs desktop/server-runner.mjs; do test -f "check/$f" || { echo "missing $f"; exit 1; }; done
+          for f in SniffSolution.exe START_SNIFF.cmd runtime/node.exe runtime/python/python.exe runtime/ffmpeg/ffmpeg.exe runtime/ffmpeg/LICENSE public/dictation.js public/production.js lib/production.mjs PHASE2_TEST_GUIDE.md server.mjs desktop/server-runner.mjs; do test -f "check/$f" || { echo "missing $f"; exit 1; }; done
           echo "ZIP verified: $(unzip -Z1 "$zip" | wc -l) entries"
           cp "$zip" release/Sniff-Solution-Windows-Full-App.zip
       - name: Publish GitHub Release

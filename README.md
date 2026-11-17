@@ -126,3 +126,7 @@ The repository does not contain a hosted deployment. The local developer app is 
 - [Perplexity Agent API migration reference](https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/how-to)
 - [Supabase data security](https://supabase.com/docs/guides/database/secure-data)
 
+
+## 0.2.1 production usability update
+
+Studios provide browser dictation for creative briefs and captions/production notes. Speech appends to typed text and requires browser support and microphone permission; the browser service may process audio online. Final outputs appear by default in source selectors and Media Library; Show saved originals reveals preserved recovery files. Batch filenames are numbered. Budget feedback shows required reservations and remaining monthly budget before submission without changing owner settings.
