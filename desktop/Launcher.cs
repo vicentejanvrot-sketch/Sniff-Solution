@@ -182,8 +182,8 @@ internal sealed class DesktopContext : ApplicationContext
         {
             Program.Result = 1; Program.Log("Startup: " + ex.Message);
             if (!Program.Smoke) MessageBox.Show(ex.Message + "\n\nData and logs: " + Program.Home, "Sniff Solution", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            await StopAsync();
         }
+        if (Program.Result != 0) await StopAsync();
     }
 
     private WebClient Client()
