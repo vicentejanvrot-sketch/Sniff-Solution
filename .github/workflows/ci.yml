@@ -1,0 +1,33 @@
+name: Phase 1 checks
+on:
+  push:
+    branches: [main, phase-1-foundation]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax checks
+        run: npm run check
+      - name: Core, storage, security and HTTP integration tests
+        run: npm test
+      - name: Python editorial checks
+        run: python3 -m unittest discover -s tools -p 'test_*.py'
+      - name: Install isolated browser QA tools
+        run: npm install --prefix /tmp/sniff-browser --no-save --ignore-scripts playwright@1.56.1
+      - name: Install browser
+        run: /tmp/sniff-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Desktop and mobile browser smoke
+        env:
+          NODE_PATH: /tmp/sniff-browser/node_modules
+        run: node test/browser-smoke.cjs
