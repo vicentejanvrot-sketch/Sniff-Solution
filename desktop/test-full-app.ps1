@@ -62,6 +62,6 @@ if([string]::IsNullOrWhiteSpace($expectedCommit)){$expectedCommit=(& git -C $roo
 if($info.source_commit -ne $expectedCommit){throw "build-info.json commit $($info.source_commit) does not match $expectedCommit."}
 if((Split-Path $zip -Leaf) -ne "Sniff-Solution-Windows-Full-App-$expectedVersion-$($expectedCommit.Substring(0,7)).zip"){throw 'ZIP name does not identify the version and commit.'}
 if(!(Select-String -Path (Join-Path $appDir 'public\app.js') -SimpleMatch 'dialog-version')){throw 'Brand dialog version badge is missing.'}
-Write-Host "Verified version $expectedVersion from commit $expectedCommit
+Write-Host "Verified version $expectedVersion from commit $expectedCommit"
 Write-Host 'Full app ZIP verified: all sources/runtimes, latest website button, standalone launcher, current server version, overwrite-safe configuration/data and desktop shortcut pointing at the extracted folder.'
 
