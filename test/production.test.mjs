@@ -111,3 +111,17 @@ test('private image thumbnails are bounded, reusable and removed with the asset'
  const cached=await fetch(f.base+route,{headers:{'X-Sniff-Client':'1'}});assert.deepEqual(Buffer.from(await cached.arrayBuffer()),image);
  assert.equal((await f.request('/api/media/'+m.id,'DELETE')).status,200);assert.equal((await f.request(route)).status,404);await assert.rejects(readFile(path.join(f.dir,'thumbnails',m.id+'.png')),/ENOENT/);
 });
+test('existing PNG, JPEG and WebP render through HTTP into every exact output format without AI calls',async t=>{
+ const env={FFMPEG:process.env.FFMPEG||'ffmpeg'};if(!await rendererAvailable(env)){t.skip('FFmpeg is needed for existing-image verification.');return;}
+ let calls=0;const f=await fixture(t,{env,mediaRenderer:renderAsset,fetcher:async()=>{calls++;throw new Error('Local renders must not call a provider');}});
+ for(const [ext,mime] of [['png','image/png'],['jpg','image/jpeg'],['webp','image/webp']]){
+  const source=path.join(f.dir,'test-source.'+ext);execFileSync(env.FFMPEG,['-loglevel','error','-f','lavfi','-i','testsrc=s=300x500','-frames:v','1','-threads','1',source],{windowsHide:true});
+  const uploaded=await fetch(f.base+'/api/media',{method:'POST',headers:{'X-Sniff-Client':'1','Content-Type':mime,'X-File-Name':'Reference.'+ext,'X-Brand-Id':'brand'},body:await readFile(source)});assert.equal(uploaded.status,201);const media=await uploaded.json();
+  for(const [aspect,[width,height]] of Object.entries(formats)){
+   const q=await f.request('/api/production','POST',{kind:'render',brandId:'brand',sourceId:media.id,title:'Resize '+ext+' '+aspect,aspect,fit:'contain'});assert.equal(q.status,202);
+   const {job,state}=await f.done(q.body.id);assert.equal(job.status,'completed',job.error);assert.equal(job.costEstimate,0);const result=state.media.find(m=>m.id===job.mediaIds[0]);assert.deepEqual([result.width,result.height],[width,height]);
+   const download=await fetch(f.base+'/api/media/'+result.id,{headers:{'X-Sniff-Client':'1'}});assert.equal(download.status,200);const bytes=Buffer.from(await download.arrayBuffer());assert.deepEqual([bytes.readUInt32BE(16),bytes.readUInt32BE(20)],[width,height],ext+' '+aspect);
+  }
+ }
+ assert.equal(calls,0);
+});

@@ -1,8 +1,8 @@
-# Phase 2 — Content Production (0.2.1)
+# Phase 2 — Content Production (0.2.2)
 
 ## Update
 
-Quit Sniff Solution from its tray icon. Extract the complete Windows app ZIP over the intended app folder. Run START_SNIFF.cmd there and confirm v0.2.1. Existing configuration and records are preserved. Windows packages include Node, Python, FFmpeg and FFprobe; source archives do not.
+Quit Sniff Solution from its tray icon. Extract the complete Windows app ZIP over the intended app folder. Run START_SNIFF.cmd there and confirm v0.2.2. Existing configuration and records are preserved. Windows packages include Node, Python, FFmpeg and FFprobe; source archives do not.
 
 ## Configure securely
 
@@ -62,3 +62,9 @@ The budget panel shows count × per-image reservation, remaining monthly budget 
 ## Media Library thumbnails
 
 Open Media Library and scroll through image cards. Each image should display a small thumbnail without clicking Preview. Transparent PNGs use a checkerboard background. Search, switch brands and toggle Show saved originals; the thumbnails should follow the visible cards. Preview and Download remain available. Thumbnail creation runs locally through bundled FFmpeg and never generates another AI image. Videos/documents keep their type icons.
+
+## Existing-image rendering and format review (0.2.2)
+
+Select a brand in the studio form, choose Render an existing image and select a source. The title fills automatically if empty. Choose the format and read Finished output for the exact target dimensions. Fit keeps the entire source with padding; Fill crops its edges. Local rendering does not use the creative brief or change the pictured scene. Use Generate / edit images with a reference for AI scene edits.
+
+After completion in Activity, select Review assets. The result opens directly. Check the pixel dimensions below the image, its actual visible proportions and Download asset. Batch requests have an Output from this request selector. Expected PNG sizes: 1:1 = 1080×1080; 4:5 = 1080×1350; 9:16 = 1080×1920; 16:9 = 1920×1080. Tests verify real downloaded PNG bytes for all four formats from PNG/JPEG/WebP sources, plus the browser rendering/review/download flow.
