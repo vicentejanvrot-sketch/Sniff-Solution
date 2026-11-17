@@ -63,7 +63,7 @@ Outbound website reads use public DNS checks and pinned addresses, reject local/
 - Dashboard with live counts and module tiles.
 - Multiple brand profiles, editable with conflict detection.
 - All 13 graphical text workflows: Reel, trend research, caption, carousel, story, profile audit, weekly plan, voice edit, comments, replies, direct messages, repurposing and performance audit.
-- OpenAI Responses, Anthropic Messages and Perplexity Sonar HTTP adapters. Model IDs are configurable. Only Perplexity is wired to a web-grounded research API; other providers receive supplied context without browsing tools.
+- OpenAI Responses, Anthropic Messages and Perplexity Agent API (`POST /v1/agent`) HTTP adapters. Model IDs are configurable. For Perplexity, enter an effort preset (fast, low, medium, high, xhigh) or a provider/model ID; former Sonar IDs map to Perplexity's documented presets (sonar and sonar-pro → fast, sonar-reasoning-pro → low, sonar-deep-research → high). Sonar Chat Completions support ended on 2026-09-27. Only Perplexity is wired to a web-grounded research API; other providers receive supplied context without browsing tools.
 - Single-worker persistent job queue, visible failures, partial-output handling, interrupted-job detection, no automatic billed retries.
 - Draft editing, status review, 25 prior saved versions, copy and Markdown export.
 - Local or Supabase persistence; private media up to 100 MiB.
@@ -113,6 +113,6 @@ The repository does not contain a hosted deployment. The local developer app is 
 
 - [OpenAI Responses](https://platform.openai.com/docs/api-reference/responses/create)
 - [Anthropic Messages](https://docs.anthropic.com/en/api/messages)
-- [Perplexity Sonar and migration reference](https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/how-to)
+- [Perplexity Agent API migration reference](https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/how-to)
 - [Supabase data security](https://supabase.com/docs/guides/database/secure-data)
 

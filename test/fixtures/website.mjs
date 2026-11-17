@@ -8,6 +8,6 @@ export function modelSuggestions(evidence){
  return {palette:['#246448','#F0B24D'],font:'Inter',voice:'Friendly, practical and clear.',audience:'Travellers who want to organize their trip details.',goals:'Encourage visitors to explore the trip planning features.',allowedClaims:[{claim:'Keep trip itineraries together.',evidenceQuote:'Plan trips and keep itineraries in one place.',sourceUrl:evidence.pages[0].url}],prohibitedClaims:['guaranteed savings','100% accurate'],notes:['Audience and goals are recommendations for owner review.']};
 }
 export function providerResponse(suggestions){
- return {choices:[{message:{content:JSON.stringify(suggestions)},finish_reason:'stop'}],usage:{prompt_tokens:100,completion_tokens:80}};
+ return {status:'completed',output:[{type:'search_results',results:[{id:1,url:'https://example.com/'}]},{type:'message',content:[{type:'output_text',text:JSON.stringify(suggestions)}]}],usage:{input_tokens:100,output_tokens:80}};
 }
 
