@@ -153,3 +153,45 @@ test('logo-only render needs no font, ignores unused font choices and records no
  const q=await f.request('/api/production','POST',{kind:'render',brandId:'brand',sourceId:'logo',logoId:'logo',branding:true,includeBrandText:false,fontId:'system:removed-font',aspect:'16:9'});assert.equal(q.status,202);
  const result=await f.done(q.body.id);assert.equal(result.job.status,'completed',result.job.error);const final=result.state.media.find(m=>m.role==='rendered');assert.equal(final.width,1920);assert.equal(final.height,1080);assert.equal(final.renderingFont,undefined);assert.equal(result.job.production.fontId,'');assert.equal(result.job.production.systemFontId,'');assert.equal(result.job.reconciledCost,0);
 });
+
+
+test('video goal preparation preserves intent, is billed separately and never auto-generates video',async t=>{
+ let videoCalls=0,preparedRequest,videoRequest;
+ const f=await fixture(t,{assetDownloader:async()=>Buffer.from('mock mp4'),fetcher:async(url,opts)=>{
+  const b=opts.body&&JSON.parse(opts.body);
+  if(url.endsWith('/responses')){preparedRequest=b;return Response.json({status:'completed',output:[{content:[{type:'output_text',text:'0-4s: Friends follow a phone map. 4-10s: They reach the beach and save trip memories.'}]}],usage:{input_tokens:100,output_tokens:40}});}
+  if(opts.method==='POST'){videoCalls++;videoRequest=b;return Response.json({request_id:'prepared-video'});}return Response.json({status:'completed',video:{url:'https://media.example.com/prepared.mp4'}});
+ }});
+ await f.store.update(s=>{s.settings.providers.openai={model:'test-text-model',inputRate:1,outputRate:2};s.brands[0].research={privateNotes:'UNRELATED_METADATA'};});
+ const body={provider:'openai',brandId:'brand',brief:'Friends find a beach using our map and save trip memories',duration:10,aspect:'16:9',title:'Beach story'};
+ assert.equal((await f.request('/api/video-brief','POST',{...body,duration:30})).status,400);
+ const q=await f.request('/api/video-brief','POST',body);assert.equal(q.status,202);const {job,state}=await f.done(q.body.id);assert.equal(job.status,'completed');assert.equal(videoCalls,0);assert.equal(state.media.length,0);assert.equal(job.reservation,1);assert.ok(job.costEstimate>0);
+ const sent=JSON.parse(preparedRequest.input);assert.equal(sent.goal,body.brief);assert.equal(sent.durationSeconds,10);assert.ok(!JSON.stringify(preparedRequest).includes('UNRELATED_METADATA'));assert.match(preparedRequest.instructions,/Preserve the user intent/);
+ const draft=state.drafts.find(d=>d.id===job.draftId);assert.equal(draft.videoBrief.originalPrompt,body.brief);
+ const request={kind:'video',brandId:'brand',prompt:draft.text+' Natural daylight.',originalPrompt:body.brief,videoBriefDraftId:draft.id,duration:10,aspect:'16:9'};
+ assert.equal((await f.request('/api/production','POST',{...request,duration:5})).status,409);assert.equal(videoCalls,0);
+ const video=await f.request('/api/production','POST',request);assert.equal(video.status,202);const result=await f.done(video.body.id);assert.equal(result.job.status,'completed');assert.equal(videoCalls,1);assert.equal(videoRequest.prompt,request.prompt);assert.ok(!JSON.stringify(videoRequest).includes('UNRELATED_METADATA'));assert.equal(result.job.production.originalPrompt,body.brief);
+});
+
+test('failed or incomplete brief preparation retains billing information and creates no video',async t=>{
+ const f=await fixture(t,{fetcher:async()=>Response.json({status:'incomplete',output:[{content:[{type:'output_text',text:'Partial scene'}]}],usage:{input_tokens:3,output_tokens:5}})});
+ await f.store.update(s=>s.settings.providers.openai.model='text-model');
+ const body={provider:'openai',brandId:'brand',brief:'A travel story',duration:5,aspect:'1:1'};
+ const q=await f.request('/api/video-brief','POST',body);const result=await f.done(q.body.id);assert.equal(result.job.status,'incomplete');assert.ok(result.job.tokens);assert.equal(result.state.media.length,0);
+ const draft=result.state.drafts.find(d=>d.id===result.job.draftId);assert.equal(draft.status,'needs-review');
+ assert.equal((await f.request('/api/production','POST',{kind:'video',brandId:'brand',prompt:draft.text,originalPrompt:body.brief,videoBriefDraftId:draft.id,duration:5,aspect:'1:1'})).status,409);
+ await f.store.update(s=>s.settings.monthlyBudget=0.5);assert.equal((await f.request('/api/video-brief','POST',body)).status,409);
+ const disabled=await fixture(t,{env:{ENABLED_MODULES:'sniff'}});assert.equal((await disabled.request('/api/video-brief','POST',body)).status,403);
+});
+
+
+test('private video thumbnails decode the first frame locally and preserve the original MP4',async t=>{
+ const env={FFMPEG:process.env.FFMPEG||'ffmpeg'};if(!await rendererAvailable(env)){t.skip('FFmpeg needed');return;}
+ const f=await fixture(t,{env,fetcher:async()=>{throw new Error('Thumbnail generation must not call AI');}}),source=path.join(f.dir,'first-frame.mp4');
+ execFileSync(env.FFMPEG,['-loglevel','error','-f','lavfi','-i','color=c=blue:s=180x320:d=0.2','-c:v','libx264','-pix_fmt','yuv420p',source],{windowsHide:true});const original=await readFile(source);
+ const upload=await fetch(f.base+'/api/media',{method:'POST',headers:{'X-Sniff-Client':'1','Content-Type':'video/mp4','X-File-Name':'Portrait video.mp4','X-Brand-Id':'brand'},body:original});assert.equal(upload.status,201);const m=await upload.json(),route='/api/media/'+m.id+'/thumbnail';
+ assert.equal((await fetch(f.base+route)).status,403);
+ const response=await fetch(f.base+route,{headers:{'X-Sniff-Client':'1'}});assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'image/png');const bytes=Buffer.from(await response.arrayBuffer());const [width,height]=[bytes.readUInt32BE(16),bytes.readUInt32BE(20)];assert.ok(width<=360&&height<=240);assert.ok(Math.abs(width/height-180/320)<0.02);
+ const thumbnail=path.join(f.dir,'decoded-frame.png');await writeFile(thumbnail,bytes);const pixels=execFileSync(env.FFMPEG,['-loglevel','error','-i',thumbnail,'-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{windowsHide:true});assert.ok(pixels[2]>200&&pixels[0]<20&&pixels[1]<20,'Thumbnail should contain the actual blue video frame');
+ const download=await fetch(f.base+'/api/media/'+m.id,{headers:{'X-Sniff-Client':'1'}});assert.deepEqual(Buffer.from(await download.arrayBuffer()),original);assert.equal(f.store.read().jobs.length,0);
+});

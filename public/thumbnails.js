@@ -1,6 +1,6 @@
 let cleanup=()=>{};
 export function clearThumbnails(){cleanup();cleanup=()=>{};}
-export function thumbnailHTML(m,esc){return m.mime.startsWith('image/')?'<div class="asset-thumbnail"><img data-thumbnail="'+esc(m.id)+'" alt="'+esc(m.name)+'" hidden><span class="hint">Loading image…</span></div>':'<div class="media-symbol" aria-hidden="true">'+(m.mime.startsWith('video/')?'▷':'▤')+'</div>';}
+export function thumbnailHTML(m,esc){return m.mime.startsWith('image/')||m.mime==='video/mp4'?'<div class="asset-thumbnail"><img data-thumbnail="'+esc(m.id)+'" alt="'+esc(m.name)+'" hidden><span class="hint">Loading '+(m.mime==='video/mp4'?'video frame':'image')+'…</span></div>':'<div class="media-symbol" aria-hidden="true">▤</div>';}
 export function loadThumbnails(root,api){
  clearThumbnails();const controller=new AbortController(),urls=[],queue=[];let active=0,disposed=false;
  const observer=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){observer.unobserve(entry.target);queue.push(entry.target.querySelector('[data-thumbnail]'));}pump();},{rootMargin:'150px'});

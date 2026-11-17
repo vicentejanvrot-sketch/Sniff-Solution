@@ -20,7 +20,13 @@ jobs:
       - name: Syntax checks
         run: npm run check
       - name: Install media renderer for thumbnail and rendering verification
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: |
+          if command -v ffmpeg >/dev/null; then
+            ffmpeg -version
+          else
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y ffmpeg
+          fi
       - name: Core, storage, security and HTTP integration tests
         run: npm test
         env:
@@ -30,7 +36,12 @@ jobs:
       - name: Install isolated browser QA tools
         run: npm install --prefix /tmp/sniff-browser --no-save --ignore-scripts playwright@1.56.1
       - name: Install browser
-        run: /tmp/sniff-browser/node_modules/.bin/playwright install --with-deps chromium
+        run: |
+          if command -v google-chrome >/dev/null; then
+            echo "SNIFF_TEST_BROWSER=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          else
+            /tmp/sniff-browser/node_modules/.bin/playwright install --with-deps chromium
+          fi
       - name: Desktop and mobile browser smoke
         env:
           NODE_PATH: /tmp/sniff-browser/node_modules
