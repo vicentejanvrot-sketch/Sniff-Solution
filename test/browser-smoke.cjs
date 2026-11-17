@@ -1,7 +1,7 @@
 // Browser QA dependency is installed in an isolated CI-only directory, not in the app.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
-const {mkdtemp,rm}=require('node:fs/promises');
+const {mkdtemp,rm,readFile}=require('node:fs/promises');
 const {tmpdir}=require('node:os');
 const path=require('node:path');
 
@@ -10,7 +10,7 @@ const path=require('node:path');
  const dir=await mkdtemp(path.join(tmpdir(),'sniff-browser-'));
  const {collectWebsite}=await import('../lib/website.mjs');
  const {fixtureReader,modelSuggestions,providerResponse}=await import('./fixtures/website.mjs');
- const app=await createApp({dir,env:{PERPLEXITY_API_KEY:'browser-test-key'},mediaRenderer:async(r)=>({...r,width:1080,height:1350}),websiteReader:async url=>{await new Promise(r=>setTimeout(r,300));return collectWebsite(url,{reader:fixtureReader});},fetcher:async(url,options)=>{const payload=JSON.parse(JSON.parse(options.body).input);return Response.json(providerResponse(modelSuggestions(payload.websiteEvidence)));}});
+ const app=await createApp({dir,env:{PERPLEXITY_API_KEY:'browser-test-key'},websiteReader:async url=>{await new Promise(r=>setTimeout(r,300));return collectWebsite(url,{reader:fixtureReader});},fetcher:async(url,options)=>{const payload=JSON.parse(JSON.parse(options.body).input);return Response.json(providerResponse(modelSuggestions(payload.websiteEvidence)));}});
  await app.store.update(s=>{s.settings.providers.perplexity.model='test-sonar';});
  await new Promise(resolve=>app.server.listen(0,'127.0.0.1',resolve));
  const browser=await chromium.launch({headless:true,...(process.env.SNIFF_TEST_BROWSER?{executablePath:process.env.SNIFF_TEST_BROWSER}:{})});
@@ -21,10 +21,10 @@ const path=require('node:path');
   await page.goto('http://127.0.0.1:'+app.server.address().port);
   await page.getByRole('heading',{name:'A little focus. A lot of possibility.'}).waitFor();
   await page.getByRole('heading',{name:'Recent activity'}).waitFor();
-  assert.equal(await page.locator('#app-version').textContent(),'v0.2.1');
+  assert.equal(await page.locator('#app-version').textContent(),'v0.2.2');
   await page.locator('nav').getByRole('button',{name:'Brand Studio',exact:true}).click();
   await page.getByRole('button',{name:'+ Add brand',exact:true}).click();
-  assert.equal(await page.locator('#dialog-version').textContent(),'v0.2.1');
+  assert.equal(await page.locator('#dialog-version').textContent(),'v0.2.2');
   await page.getByRole('button',{name:'Suggest from website',exact:false}).waitFor();
   await page.getByLabel('Brand name',{exact:true}).fill('Travel One QA');
   await page.getByLabel('Tone of voice',{exact:true}).fill('Friendly, practical, clear.');
@@ -103,12 +103,36 @@ const path=require('node:path');
   await page.getByRole('button',{name:'Review assets',exact:true}).waitFor();
   await page.getByRole('button',{name:'Review assets',exact:true}).click();
   await page.getByRole('heading',{name:'Branded portrait QA-rendered.png',exact:true}).waitFor();
-  await page.locator('.card').filter({has:page.getByRole('heading',{name:'Branded portrait QA-rendered.png',exact:true})}).getByRole('button',{name:'Preview',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#modal img')?.naturalWidth===1080);
+  assert.equal(await page.locator('#modal img').evaluate(img=>img.naturalHeight),1350);
+  const shape=await page.locator('#modal img').boundingBox();assert.ok(Math.abs(shape.width/shape.height-4/5)<0.01,'Preview must preserve the actual portrait proportions');
+  assert.equal(await page.locator('#asset-dimensions').textContent(),'1080 × 1350 pixels');
+  const saved=page.waitForEvent('download');await page.getByRole('button',{name:'Download asset',exact:true}).click();const png=await readFile(await(await saved).path());assert.deepEqual([png.readUInt32BE(16),png.readUInt32BE(20)],[1080,1350]);
   await page.getByLabel('Caption / production notes',{exact:true}).fill('Approved branded asset');
   await page.getByLabel('Review status',{exact:true}).selectOption('approved');
   await page.getByRole('button',{name:'Save review',exact:true}).click();
   await page.waitForFunction(()=>!document.querySelector('#modal').open);
   assert.equal(app.store.read().media.find(m=>m.role==='rendered').status,'approved');
+  // Reproduce the user's workflow with actual rendering, direct review and download for each shape.
+  await app.store.update(s=>s.brands.push({id:'other-brand',name:'Other brand',font:'Arial',palette:''}));
+  await page.reload();await page.getByRole('heading',{name:'A little focus. A lot of possibility.'}).waitFor();
+  for(const [aspect,width,height] of [['1:1',1080,1080],['9:16',1080,1920],['16:9',1920,1080]]){
+   await page.locator('nav').getByRole('button',{name:'Image Studio',exact:true}).click();
+   await page.getByLabel('Brand',{exact:true}).selectOption(source.brandId);
+   await page.getByLabel('Action',{exact:true}).selectOption('render');
+   await page.getByLabel('Source asset / reference',{exact:true}).selectOption(source.id);
+   await page.getByLabel('Output format',{exact:true}).selectOption(aspect);
+   assert.ok((await page.getByLabel('Working title',{exact:true}).inputValue()).endsWith(width+'x'+height),'Render title should be filled with its target dimensions');
+   assert.equal(await page.locator('#creative-brief-field').isVisible(),false);
+   assert.ok((await page.locator('#output-plan').textContent()).includes(width+' × '+height));
+   await page.getByRole('button',{name:'Start production',exact:true}).click();
+   await page.getByRole('heading',{name:'Keep the work moving.',exact:true}).waitFor();
+   const job=app.store.read().jobs.at(-1);await page.locator('[data-open-assets="'+job.id+'"]').click();
+   await page.waitForFunction(([w,h])=>{const img=document.querySelector('#modal img');return img?.naturalWidth===w&&img?.naturalHeight===h;},[width,height]);
+   const bounds=await page.locator('#modal img').boundingBox();assert.ok(Math.abs(bounds.width/bounds.height-width/height)<0.01,'Review must show the actual output shape');
+   const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download asset',exact:true}).click();const data=await readFile(await(await pending).path());assert.deepEqual([data.readUInt32BE(16),data.readUInt32BE(20)],[width,height]);
+   await page.locator('#modal').getByRole('button',{name:'Close',exact:true}).click();
+  }
   await page.locator('nav').getByRole('button',{name:'Video Studio',exact:true}).click();
   await page.getByRole('heading',{name:'Video Studio',exact:true}).waitFor();
   assert.equal(await page.getByLabel('Clip duration',{exact:true}).inputValue(),'5');

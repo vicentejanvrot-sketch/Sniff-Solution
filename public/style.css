@@ -14,3 +14,4 @@
 #production-form .check-label{flex-direction:row;justify-content:flex-start}#production-form .check-label input{flex:none;width:auto}
 [hidden]{display:none!important}.dictation-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px}.dictation-controls button[aria-pressed=true]{background:#a32b2b;color:white}.check-label input{width:auto;flex:none}
 .asset-thumbnail{height:200px;display:flex;align-items:center;justify-content:center;background:repeating-conic-gradient(#edf1eb 0% 25%,#fff 0% 50%) 50% / 20px 20px;border-radius:10px;margin-bottom:18px;overflow:hidden}.asset-thumbnail img{width:100%;height:100%;object-fit:contain}.asset-thumbnail .hint{background:white;padding:8px}
+img.media-preview{width:auto;height:auto;max-width:100%;max-height:65vh;display:block;margin:0 auto;object-fit:contain}.asset-dimensions{font-weight:600;color:#20352e}.job-output-select{margin:12px 0}

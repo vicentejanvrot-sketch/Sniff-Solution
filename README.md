@@ -132,3 +132,7 @@ The repository does not contain a hosted deployment. The local developer app is 
 Studios provide browser dictation for creative briefs and captions/production notes. Speech appends to typed text and requires browser support and microphone permission; the browser service may process audio online. Final outputs appear by default in source selectors and Media Library; Show saved originals reveals preserved recovery files. Batch filenames are numbered. Budget feedback shows required reservations and remaining monthly budget before submission without changing owner settings.
 
 Media Library image cards show private, lazily loaded thumbnails. Small PNG previews are cached in the local data folder, including in Supabase mode, and deleted when their asset is removed. No external AI request is made for thumbnails.
+
+## 0.2.2 existing-image review and formats
+
+Activity → Review assets opens that request’s saved output directly, with a selector for batches. Previews preserve actual image proportions and display decoded pixel dimensions. Studios show the selected final dimensions and explain fit (padding) versus fill (cropping). Existing-image rendering fills a default title, uses assets from the form’s selected brand and hides the AI brief, since local rendering changes framing/branding rather than scene content. The original provider output is no longer labelled with the requested final aspect ratio.
