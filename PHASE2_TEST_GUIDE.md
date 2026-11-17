@@ -75,7 +75,7 @@ The budget panel shows count × per-image reservation, remaining monthly budget 
 
 ## Media Library thumbnails
 
-Open Media Library and scroll through image cards. Each image should display a small thumbnail without clicking Preview. Transparent PNGs use a checkerboard background. Search, switch brands and toggle Show saved originals; the thumbnails should follow the visible cards. Preview and Download remain available. Thumbnail creation runs locally through bundled FFmpeg and never generates another AI image. Videos/documents keep their type icons.
+Open Media Library and scroll through image cards. Each image should display a small thumbnail without clicking Preview. Image thumbnails, transparent areas and unused preview space use a plain white background. Search, switch brands and toggle Show saved originals; the thumbnails should follow the visible cards. Preview and Download remain available. Thumbnail creation runs locally through bundled FFmpeg and never generates another AI image. MP4 videos show their first decoded frame, generated locally through FFmpeg. Documents keep their type icons.
 
 ## Existing-image rendering and format review (0.2.2)
 
@@ -103,3 +103,8 @@ Windows verification includes discovery of real fonts and a branded render using
 5. Check Activity while an image or video runs: **Elapsed** updates during work. After completion or failure, **Total elapsed** remains visible, formatted as seconds/minutes/hours and retained after refresh or restart. It measures submission to recorded finish, including queue wait, final rendering and any gaps before recovery; it is not an isolated provider computation timer. Older records without timestamps display Elapsed time unavailable.
 
 Preparation preserves the user's intent and relevant brand rules without sending the entire saved brand research/history to the video model. It cannot guarantee moderation acceptance, precise generated app screens, readable interface text or a particular visual result. The new workflow is verified with mock AI responses and real FFmpeg rendering; no paid requests are made by automated checks. The owner's Activity screenshot shows a completed live Higgsfield generation; playback/download and the new preparation step still require live user acceptance.
+
+
+## Video thumbnails and white preview backgrounds (0.2.5)
+
+Open Media Library and scroll to a saved MP4. Its card should show the first video frame without selecting Preview; portrait and landscape videos keep their proportions. Image/video thumbnail backgrounds and preview backgrounds should be white, with no checkerboard. Existing MP4s get a thumbnail automatically when their cards come into view. Frame extraction runs locally, creates no AI job and preserves the original download. A failed decode shows Thumbnail unavailable with the Preview fallback.

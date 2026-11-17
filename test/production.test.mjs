@@ -183,3 +183,15 @@ test('failed or incomplete brief preparation retains billing information and cre
  await f.store.update(s=>s.settings.monthlyBudget=0.5);assert.equal((await f.request('/api/video-brief','POST',body)).status,409);
  const disabled=await fixture(t,{env:{ENABLED_MODULES:'sniff'}});assert.equal((await disabled.request('/api/video-brief','POST',body)).status,403);
 });
+
+
+test('private video thumbnails decode the first frame locally and preserve the original MP4',async t=>{
+ const env={FFMPEG:process.env.FFMPEG||'ffmpeg'};if(!await rendererAvailable(env)){t.skip('FFmpeg needed');return;}
+ const f=await fixture(t,{env,fetcher:async()=>{throw new Error('Thumbnail generation must not call AI');}}),source=path.join(f.dir,'first-frame.mp4');
+ execFileSync(env.FFMPEG,['-loglevel','error','-f','lavfi','-i','color=c=blue:s=180x320:d=0.2','-c:v','libx264','-pix_fmt','yuv420p',source],{windowsHide:true});const original=await readFile(source);
+ const upload=await fetch(f.base+'/api/media',{method:'POST',headers:{'X-Sniff-Client':'1','Content-Type':'video/mp4','X-File-Name':'Portrait video.mp4','X-Brand-Id':'brand'},body:original});assert.equal(upload.status,201);const m=await upload.json(),route='/api/media/'+m.id+'/thumbnail';
+ assert.equal((await fetch(f.base+route)).status,403);
+ const response=await fetch(f.base+route,{headers:{'X-Sniff-Client':'1'}});assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'image/png');const bytes=Buffer.from(await response.arrayBuffer());const [width,height]=[bytes.readUInt32BE(16),bytes.readUInt32BE(20)];assert.ok(width<=360&&height<=240);assert.ok(Math.abs(width/height-180/320)<0.02);
+ const thumbnail=path.join(f.dir,'decoded-frame.png');await writeFile(thumbnail,bytes);const pixels=execFileSync(env.FFMPEG,['-loglevel','error','-i',thumbnail,'-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{windowsHide:true});assert.ok(pixels[2]>200&&pixels[0]<20&&pixels[1]<20,'Thumbnail should contain the actual blue video frame');
+ const download=await fetch(f.base+'/api/media/'+m.id,{headers:{'X-Sniff-Client':'1'}});assert.deepEqual(Buffer.from(await download.arrayBuffer()),original);assert.equal(f.store.read().jobs.length,0);
+});

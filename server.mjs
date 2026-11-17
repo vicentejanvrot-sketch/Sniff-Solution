@@ -290,7 +290,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     }
     if(/^\/api\/media\/[^/]+\/thumbnail$/.test(p)&&req.method==='GET'){
      const m=store.read().media.find(m=>m.id===p.split('/')[3]);if(!m)fail('Media not found.',404);
-     if(!['image/png','image/jpeg','image/webp','image/gif'].includes(m.mime))fail('Thumbnails are available for images only.');
+     if(!['image/png','image/jpeg','image/webp','image/gif','video/mp4'].includes(m.mime))fail('Thumbnails are available for images and MP4 videos.');
      const file=path.join(thumbnailDir,m.id+'.png');let bytes;
      try{bytes=await readFile(file);}catch(e){
       if(e.code!=='ENOENT')throw e;

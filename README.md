@@ -159,3 +159,6 @@ See PHASE2_TEST_GUIDE.md for live acceptance steps and update instructions.
 Video Studio interprets a conversational goal through the configured OpenAI or Claude text model before generating a video. Prepare video brief saves an editable draft with scenes, timing and camera direction while preserving the original goal. The user reviews it and selects Start production to submit the reviewed prompt to Higgsfield. Text preparation and media generation are separate requests with separate reservations and billing records. Relevant brand direction informs preparation; brand research/history is not appended to reviewed video prompts. Moderation acceptance is not guaranteed.
 
 Activity keeps a formatted elapsed time after completion or failure. This covers submission to the recorded finish, including queue wait, rendering and recovery gaps. Saved timestamps support existing records; missing timestamps are shown honestly as unavailable. See PHASE2_TEST_GUIDE.md for testing and update instructions.
+
+
+Media Library now shows locally decoded first-frame thumbnails for MP4 videos as well as image thumbnails. Thumbnail and media preview backgrounds are plain white, including unused space and transparent image areas. Original files and download transparency are preserved.

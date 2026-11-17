@@ -253,6 +253,15 @@ const path=require('node:path');
   const timing=await page.locator('tr').filter({hasText:'Natural video goal'}).filter({has:page.locator('[data-open-assets]')}).locator('.job-elapsed').textContent();assert.ok(timing.startsWith('Total elapsed:'));
   await page.reload();await page.locator('nav').getByRole('button',{name:'Activity',exact:false}).click();
   assert.equal(await page.locator('tr').filter({hasText:'Natural video goal'}).filter({has:page.locator('[data-open-assets]')}).locator('.job-elapsed').textContent(),timing);
+  await page.locator('nav').getByRole('button',{name:'Media Library',exact:true}).click();
+  const videoCard=page.locator('#media-grid .card').filter({has:page.getByRole('heading',{name:'Natural video goal-rendered.mp4',exact:true})});
+  await videoCard.scrollIntoViewIfNeeded();await videoCard.locator('[data-thumbnail]').waitFor({state:'visible'});
+  assert.ok(await videoCard.locator('[data-thumbnail]').evaluate(img=>img.complete&&img.naturalWidth>0),'Video cards must show an actual decoded frame');
+  for(const card of [videoCard,page.locator('#media-grid .card').filter({has:page.getByRole('heading',{name:'Branded portrait QA-rendered.png',exact:true})})]){
+   const background=await card.locator('.asset-thumbnail').evaluate(el=>({color:getComputedStyle(el).backgroundColor,image:getComputedStyle(el).backgroundImage}));assert.deepEqual(background,{color:'rgb(255, 255, 255)',image:'none'});
+  }
+  await videoCard.getByRole('button',{name:'Preview',exact:true}).click();await page.locator('#modal video').waitFor();assert.equal(await page.locator('#modal video').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 255, 255)');
+  await page.locator('#modal').getByRole('button',{name:'Close',exact:true}).click();
   assert.deepEqual(errors,[]);
   console.log('Browser smoke passed: desktop and mobile navigation, brand creation, draft approval, Python check, 13 workflows, missing-key feedback, media upload/preview, website brand suggestions, colour swatches, font previews and font picker, preserved edits, explicit save, evidence review and disabled future modules.');
  }finally{await browser.close();await app.close();await rm(dir,{recursive:true,force:true});}
