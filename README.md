@@ -140,3 +140,15 @@ Activity → Review assets opens that request’s saved output directly, with a 
 ## 0.2.3 installed Windows fonts
 
 Image Studio and Video Studio → Rendering font now list supported TTF, OTF and TTC font files from Windows Fonts and the current user’s installed-font folder. Friendly names come from OpenType metadata. Refresh installed fonts rescans those folders without losing the brief or other choices. Approved uploaded fonts remain available in a separate group. Matching brand fonts are selected automatically when available. The renderer reads the selected local file; no installed font files or absolute paths are sent to the browser, AI providers or app ZIP. Collections expose their first face and variable fonts use their default instance. Existing records and client assets are preserved.
+
+
+## 0.2.4 local Phase 2 completion
+
+Local processing is accepted until go-live; Render is the chosen future cloud processing provider. No cloud service is required for this phase. Real video generation/playback with the owner's Higgsfield account remains an acceptance check; automated checks mock paid API calls.
+
+- Activity can record one confirmed daily provider total against selected finished requests, counting it once without guessing per-request prices. Undo restores reservations and preserves the record. Select only requests included in that total; other apps sharing a key must be excluded. Dates use UTC queue time.
+- Approved logo overlays can omit brand text, removing the font requirement. Overlays do not erase logos already baked into an image; use an AI edit first to remove those.
+- Higgsfield accepts `HF_API_KEY` containing the complete credential copied from https://open.higgsfield.ai/api-keys. Existing ID/secret pairs remain supported when that setting is blank. Desktop settings are in `%LOCALAPPDATA%\SniffSolution\.env`; use the tray menu's Edit API settings, save and restart. Credentials stay local and are excluded from workspace exports.
+- Settings now show the US$100,000 maximum monthly planning budget and explain that limit when validation fails.
+
+See PHASE2_TEST_GUIDE.md for live acceptance steps and update instructions.

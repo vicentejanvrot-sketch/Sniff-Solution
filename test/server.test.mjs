@@ -65,7 +65,7 @@ test('all thirteen workflows save usable drafts through the HTTP queue with bran
 });
 test('local developer HTTP boundaries and module checks',async t=>{
  const {request,base}=await fixture(t);
- const state=await request('/api/state');assert.equal(state.status,200);assert.equal(state.body.role,'developer-owner');assert.equal(state.body.appVersion,'0.2.3');
+ const state=await request('/api/state');assert.equal(state.status,200);assert.equal(state.body.role,'developer-owner');assert.equal(state.body.appVersion,'0.2.4');
  assert.equal((await fetch(base+'/api/state')).status,403);
  assert.equal((await request('/api/state','GET',undefined,{Origin:'https://evil.example'})).status,403);
  assert.equal((await request('/api/sniff/prospects')).status,403);
@@ -175,3 +175,21 @@ test('Supabase media uses private downloads and bucket-level prefix deletion',as
  assert.ok(!JSON.stringify((await request('/api/state')).body).includes('sb_secret_test'));
 });
 
+
+
+test('daily reconciliation is atomic, persistent, reversible and cannot be counted individually',async t=>{
+ const f=await fixture(t),dateUTC=new Date().toISOString().slice(0,10);
+ await f.store.update(s=>{delete s.reconciliations;s.jobs=['a','b'].map(id=>({id,provider:'openai',createdAt:new Date().toISOString(),status:'completed',reservation:50,costEstimate:null}));});
+ const body={provider:'openai',dateUTC,amount:0.34,jobIds:['a','b'],confirmed:true};
+ assert.equal((await fetch(f.base+'/api/reconciliations',{method:'POST',body:JSON.stringify(body)})).status,403);
+ const results=await Promise.all([f.request('/api/reconciliations','POST',body),f.request('/api/reconciliations','POST',body)]);
+ assert.deepEqual(results.map(r=>r.status).sort(),[201,409]);const saved=results.find(r=>r.status===201).body;
+ assert.equal((await f.request('/api/state')).body.usage.committed,0.34);
+ assert.equal((await f.request('/api/jobs/a/reconcile','POST',{cost:0.1})).status,409);
+ const disk=JSON.parse(await (await import('node:fs/promises')).readFile(path.join(f.dir||f.store.dir,'workspace.json'),'utf8'));assert.equal(disk.reconciliations.length,1);
+ assert.equal((await f.request('/api/reconciliations/'+saved.id+'/void','POST',{})).status,200);
+ assert.equal((await f.request('/api/state')).body.usage.committed,100);
+ assert.equal((await f.request('/api/reconciliations/'+saved.id+'/void','POST',{})).status,409);
+ assert.equal((await f.request('/api/jobs/a/reconcile','POST',{cost:0})).status,200);
+ assert.equal((await f.request('/api/reconciliations','POST',body)).status,409);
+});
