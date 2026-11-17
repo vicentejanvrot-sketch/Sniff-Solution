@@ -4,11 +4,11 @@ import {readFile,writeFile,mkdir,unlink} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Store} from './lib/store.mjs';
-import {skills,providers,id,now,fail,str,normalizeWebsite,validateBrand,validateSettings,audit,promptFor,quality,ledger} from './lib/core.mjs';
+import {skills,providers,id,now,fail,str,normalizeWebsite,validateBrand,validateSettings,audit,promptFor,quality,ledger,reconcileDay} from './lib/core.mjs';
 import {providerStatus,generate} from './lib/providers.mjs';
 import {collectWebsite} from './lib/website.mjs';
 import {chooseResearchProvider,researchInput,researchPrompt,parseResearch} from './lib/brand-research.mjs';
-import {productionSettings,productionInput,rendererAvailable,generateImages,generateVideo,renderAsset,thumbnailAsset} from './lib/production.mjs';
+import {productionSettings,productionInput,rendererAvailable,generateImages,generateVideo,renderAsset,thumbnailAsset,higgsfieldCredential} from './lib/production.mjs';
 import {installedFonts,publicFonts} from './lib/fonts.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const MAX_MEDIA=100*1024*1024;
@@ -55,7 +55,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
   const p=work.production,ext=result.mime==='video/mp4'?'mp4':'png';
   const media={id:id(),brandId:work.brandId,name:work.title+'-'+role+'.'+ext,mime:result.mime,size:result.bytes.length,tags:'production, '+role,createdAt:now(),status:'needs-review',version:1,reviewHistory:[],jobId:work.id,sourceId,draftId:p.draftId,caption:p.caption,role,aspect:role==='rendered'?p.aspect:null,requestedAspect:p.aspect,width:result.width||null,height:result.height||null,branding:role==='rendered'&&p.branding,brandSnapshot:p.brandSnapshot};media.file=media.id;
   media.imageIndex=imageIndex;if(p.count>1)media.name=work.title+'-image-'+imageIndex+'-of-'+p.count+'-'+role+'.'+ext;
-  if(role==='rendered'&&p.branding)media.renderingFont=p.systemFontName||p.fontSnapshot?.name||p.brandSnapshot.font;
+  if(role==='rendered'&&p.branding&&p.includeBrandText!==false)media.renderingFont=p.systemFontName||p.fontSnapshot?.name||p.brandSnapshot.font;
   await putMedia(media.file,result.bytes,result.mime);
   try{await store.update(s=>{s.media.unshift(media);const j=s.jobs.find(j=>j.id===work.id);(j.mediaIds||=[]).push(media.id);audit(s,'production.asset_saved',media.id);});}
   catch(e){await removeMedia(media.file).catch(()=>{});throw e;}return media;
@@ -113,7 +113,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    }
   }finally{working=false;}
  }
- function publicState(){const s=store.read();return {...s,skills,production:{fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!(env.HF_API_KEY_ID&&env.HF_API_KEY_SECRET),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 2 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
+ function publicState(){const s=store.read();return {...s,skills,production:{fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!higgsfieldCredential(env),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 2 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
  const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Cache-Control','no-store');
@@ -138,7 +138,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       const production=productionInput(b,s,fontCatalog),config=productionSettings(s.settings.production);
       if(!renderReady&&mediaRenderer===renderAsset)fail('FFmpeg is not configured. Use the complete Windows app or configure FFMPEG locally.',409);
       if(production.kind==='image'&&(!env.OPENAI_API_KEY||!config.imageModel))fail('Configure OPENAI_API_KEY locally and an image model in Settings.',409);
-      if(production.kind==='video'&&(!env.HF_API_KEY_ID||!env.HF_API_KEY_SECRET))fail('Configure HF_API_KEY_ID and HF_API_KEY_SECRET in your local settings file.',409);
+      if(production.kind==='video'&&!higgsfieldCredential(env))fail('Add HF_API_KEY (the complete copied Higgsfield API key) to your local API settings, then restart.',409);
       if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('The queue is full. Wait for a job to finish.',409);
       const reservation=production.kind==='render'?0:config.reserve*production.count;
       const available=Math.max(0,s.settings.monthlyBudget-ledger(s).committed);
@@ -225,10 +225,16 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       s.jobs.push(j);audit(s,'job.queued',j.id);return j;
      });json(res,{id:job.id,status:'queued'},202);setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
     }
+    if(p==='/api/reconciliations'&&req.method==='POST'){
+     const b=await jsonBody(req);const result=await store.update(s=>reconcileDay(s,b));return json(res,result,201);
+    }
+    if(/^\/api\/reconciliations\/[^/]+\/void$/.test(p)&&req.method==='POST'){
+     await store.update(s=>{const r=(s.reconciliations||[]).find(r=>r.id===p.split('/')[3]);if(!r)fail('Daily total not found.',404);if(r.voidedAt)fail('This total was already undone.',409);r.voidedAt=now();audit(s,'cost.day_undone',r.id);});return json(res,{ok:true});
+    }
     if(/^\/api\/jobs\/[^/]+\/reconcile$/.test(p)&&req.method==='POST'){
      const b=await jsonBody(req);const cost=Number(b.cost);
      if(!Number.isFinite(cost)||cost<0||cost>100000)fail('Enter the confirmed cost in USD.');
-     await store.update(s=>{const j=s.jobs.find(j=>j.id===p.split('/')[3]);if(!j)fail('Job not found.',404);if(['queued','running'].includes(j.status))fail('Wait until the job ends.',409);j.reconciledCost=cost;audit(s,'job.cost_reconciled',j.id);});
+     await store.update(s=>{const j=s.jobs.find(j=>j.id===p.split('/')[3]);if(!j)fail('Job not found.',404);if(['queued','running'].includes(j.status))fail('Wait until the job ends.',409);if((s.reconciliations||[]).some(r=>!r.voidedAt&&r.jobIds.includes(j.id)))fail('This request is included in a daily total. Undo that total before entering an individual cost.',409);j.reconciledCost=cost;audit(s,'job.cost_reconciled',j.id);});
      return json(res,{ok:true});
     }
     if(p==='/api/drafts'&&req.method==='POST'){
@@ -308,6 +314,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    staticFiles['/production.js']=['production.js','text/javascript; charset=utf-8'];
    staticFiles['/dictation.js']=['dictation.js','text/javascript; charset=utf-8'];
    staticFiles['/thumbnails.js']=['thumbnails.js','text/javascript; charset=utf-8'];
+   staticFiles['/reconciliation.js']=['reconciliation.js','text/javascript; charset=utf-8'];
    const entry=staticFiles[p];if(!entry)fail('Not found.',404);
    const data=await readFile(path.join(root,'public',entry[0]));res.writeHead(200,{'Content-Type':entry[1]});res.end(req.method==='HEAD'?undefined:data);
   }catch(e){if(!res.headersSent)json(res,{error:e.status?e.message:'Operation failed. Check server configuration and storage availability.'},e.status||500);else res.end();}

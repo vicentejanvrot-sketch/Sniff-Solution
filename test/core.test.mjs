@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {defaults,skills,validateBrand,validateSettings,quality,promptFor,ledger,now} from '../lib/core.mjs';
+import {defaults,skills,validateBrand,validateSettings,quality,promptFor,ledger,now,reconcileDay} from '../lib/core.mjs';
 import {generate,perplexityTarget} from '../lib/providers.mjs';
 
 test('all thirteen distinct workflows preserve brand and factual constraints',()=>{
@@ -91,4 +91,19 @@ test('Perplexity explicitly enables web search for direct models and effort pres
  }
  assert.deepEqual(skills.filter(s=>s.requiresWeb).map(s=>s.id),['ig-viral']);
  assert.match(promptFor(skills.find(s=>s.requiresWeb),{},'Travel').user,/never invent sources/);
+});
+
+
+test('daily totals release covered reservations once without inventing per-request prices',()=>{
+ const s=defaults(),dateUTC=now().slice(0,10);
+ s.jobs=['a','b'].map(id=>({id,createdAt:now(),status:'completed',provider:'openai',reservation:50,costEstimate:null}));
+ const body={provider:'openai',dateUTC,amount:0.34,jobIds:['a','b'],confirmed:true};
+ assert.equal(ledger(s).committed,100);
+ for(const invalid of [{confirmed:false},{amount:''},{amount:null},{amount:-1},{dateUTC:'2026-02-30'},{jobIds:['a','a']},{jobIds:['missing']},{provider:'higgsfield'}])assert.throws(()=>reconcileDay(s,{...body,...invalid}));
+ const r=reconcileDay(s,body);assert.equal(ledger(s).committed,0.34);assert.equal(ledger(s).unpriced,0);assert.ok(s.jobs.every(j=>j.reconciledCost==null));
+ assert.throws(()=>reconcileDay(s,body),/already reconciled/);
+ r.voidedAt=now();assert.equal(ledger(s).committed,100);assert.equal(ledger(s).unpriced,2);
+ s.jobs[0].reconciledCost=0;assert.throws(()=>reconcileDay(s,body));assert.equal(ledger(s).unpriced,1);
+ s.reconciliations=[{...r,voidedAt:null,dateUTC:'2000-01-01',jobIds:[],amount:90}];assert.equal(ledger(s).committed,50,'Other months must not count');
+ assert.throws(()=>validateSettings({monthlyBudget:250000,reservePerJob:50}),/100,000/);
 });

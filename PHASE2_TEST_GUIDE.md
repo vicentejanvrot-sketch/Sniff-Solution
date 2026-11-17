@@ -1,8 +1,8 @@
-# Phase 2 — Content Production (0.2.3)
+# Phase 2 — Content Production (0.2.4)
 
 ## Update
 
-Quit Sniff Solution from its tray icon. Extract the complete Windows app ZIP over the intended app folder. Run START_SNIFF.cmd there and confirm v0.2.3. Existing configuration and records are preserved. Windows packages include Node, Python, FFmpeg and FFprobe; source archives do not.
+Quit Sniff Solution from its tray icon. Extract the complete Windows app ZIP over the intended app folder. Run START_SNIFF.cmd there and confirm v0.2.4. Existing configuration and records are preserved. Windows packages include Node, Python, FFmpeg and FFprobe; source archives do not.
 
 ## Configure securely
 
@@ -10,17 +10,31 @@ Use the tray menu to edit local API settings. Keep secrets out of chat, exports 
 
 ```
 OPENAI_API_KEY=your-local-key
-HF_API_KEY_ID=your-local-higgsfield-api-key-id
-HF_API_KEY_SECRET=your-local-higgsfield-api-key-secret
+HF_API_KEY=the-complete-key-copied-from-Higgsfield
 ```
 
 Restart after editing. Open Settings & Costs, set an image model available to your OpenAI account, and save. Text models and image models have separate settings. Video uses the documented Seedance 2.0 text-to-video adapter; arbitrary model endpoints are not supported. A Higgsfield website subscription does not establish API credit or model access.
+
+On Vicente's desktop installation this file is `C:\Users\vicen\AppData\Local\SniffSolution\.env`. Press Windows+R and enter `%LOCALAPPDATA%\SniffSolution` to find it, or use the tray menu's **Edit API settings**. The preferred setting is now `HF_API_KEY`, copied whole from https://open.higgsfield.ai/api-keys; do not add a `Key ` prefix. Older `HF_API_KEY_ID` plus `HF_API_KEY_SECRET` settings still work when `HF_API_KEY` is blank. The complete copied credential is displayed only at creation; create a new key if only its visible ID was saved. Never send credentials in chat.
+
+## Phase 2 completion status
+
+Local processing is the accepted setup until go-live. **Render is the chosen future cloud processing provider.** Cloud provisioning is deferred. Publishing remains Phase 3.
+
+Image generation/editing, batching, exact output formats, local rendering, thumbnails, dictation, review/download, installed fonts and cost controls have automated coverage. These checks use mock provider responses and real local media processing; they do not establish paid account access. **A real Higgsfield video generation/playback/download has not yet been tested with the owner's account.** Complete the Video Studio acceptance steps below before signing off that workflow. Keep the returned request ID and any Activity error if the live check fails.
+
+## Daily cost totals and logo-only overlays (0.2.4)
+
+1. Activity → **Record a daily total**. Choose the provider and UTC date, select only requests included in the provider's confirmed amount, enter that amount and confirm its scope. All brands are available in this dialog. The total counts once; selected jobs display **Included in daily total**, without fabricated individual prices. Local renders and already reconciled requests are excluded. For example, enter $0.34 only if that total belongs to the selected Sniff requests, not other activity sharing the API key.
+2. Check Settings & Costs: selected reservations should be replaced by the one total. **Undo total** restores their reservations and retains an audit record. Reconcile individual requests separately only when their actual charges are known. Dates use queue time in UTC; verify provider periods for jobs spanning midnight.
+3. Image Studio → Render an existing image → select the source and approved logo → enable approved brand overlays → uncheck **Include brand name / overlay text**. A logo and colour band render without requiring a font. This overlays a logo; removing a logo already baked into an image requires an AI edit first.
+4. Monthly planning budgets support up to US$100,000. The limit is shown in Settings and in validation errors. These values do not change the provider's billing limits.
 
 The default media reservation is US$5 per image or video request. Adjust it and the monthly budget before starting. A batch of four reserves four times the configured media amount. These are planning reservations, not quotes or hard provider caps. Media jobs stay unpriced until you reconcile the actual cost in Activity. No paid calls are made by automated tests.
 
 ## Image Studio
 
-1. Create/select a brand. Upload a PNG logo in Media Library, preview it and save its review status as approved. For a custom brand font, upload its licensed TTF/OTF file and approve it too. Only approved logos/fonts appear in the studio overlay selectors. Windows system fonts Arial, Georgia, Times New Roman, Segoe UI, Verdana and Tahoma can be used without upload.
+1. Create/select a brand. Upload a PNG logo in Media Library, preview it and save its review status as approved. For a custom brand font, upload its licensed TTF/OTF file and approve it too. Only approved logos/fonts appear in the studio overlay selectors. The Rendering font dropdown lists supported installed Windows fonts without requiring an upload.
 2. Open Image Studio. Enter a title and brief, select a format and generate one image. Keep Sniff running. Activity should show generation and rendering phases, then completed.
 3. Open Media Library. The finished PNG appears by default, marked needs review. Select Show saved originals to reveal its preserved original. Preview the finished asset and check its framing and dimensions.
 4. Test a batch of two. Verify two finished assets by default, numbered image 1 and image 2. Show saved originals reveals their two recovery copies; those are not additional AI generations. If a provider returns fewer than requested, Activity should say incomplete.

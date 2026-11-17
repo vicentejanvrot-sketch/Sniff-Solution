@@ -84,7 +84,7 @@ test('generated media download revalidates redirects and blocks private destinat
  await assert.rejects(downloadAsset('https://127.0.0.1/file'),/public websites/);
  await assert.rejects(downloadAsset('https://media.example.com/file',{lookup:async()=>[{address:'10.0.0.1',family:4}]}),/public address/);
  let submitted=false;
- await assert.rejects(generateVideo({providerRequestId:'existing',production:{}},{env:{},fetcher:async(_u,o)=>{assert.equal(o.method,'GET');submitted=true;return Response.json({status:'nsfw'});},onPhase:async()=>{}}),/nsfw/);assert.ok(submitted);
+ await assert.rejects(generateVideo({providerRequestId:'existing',production:{}},{env:{HF_API_KEY:'test-complete-key'},fetcher:async(_u,o)=>{assert.equal(o.method,'GET');submitted=true;return Response.json({status:'nsfw'});},onPhase:async()=>{}}),/nsfw/);assert.ok(submitted);
 });
 test('real FFmpeg renders PNG transparency, brand logo/text and playable MP4',async t=>{
  const env={FFMPEG:process.env.FFMPEG||'ffmpeg'};
@@ -133,4 +133,23 @@ test('installed font selection and refresh use catalog IDs without exposing loca
  await writeFile(path.join(f.dir,'uploads','font-source'),png);await f.store.update(s=>s.media.push({id:'font-source',file:'font-source',brandId:'brand',mime:'image/png',name:'Source'}));
  const q=await f.request('/api/production','POST',{kind:'render',brandId:'brand',sourceId:'font-source',branding:true,fontId:'system:local-font'});assert.equal(q.status,202);const {job,state}=await f.done(q.body.id);assert.equal(job.status,'completed');assert.equal(job.production.systemFontName,'Local font');assert.equal(state.media.find(m=>m.role==='rendered').renderingFont,'Local font');assert.ok(!JSON.stringify(state).includes('private-font-directory'));
  const refreshed=await f.request('/api/fonts/refresh','POST',{});assert.equal(refreshed.status,200);assert.equal(refreshed.body.length,2);assert.ok(!JSON.stringify(refreshed.body).includes('private-font-directory'));
+});
+
+
+test('complete Higgsfield key works for submit and poll and stays private',async t=>{
+ let submissions=0;const f=await fixture(t,{env:{HF_API_KEY:'complete-private-key',HF_API_KEY_ID:'',HF_API_KEY_SECRET:''},assetDownloader:async()=>Buffer.from('mock mp4'),fetcher:async(_url,opts)=>{
+  assert.equal(opts.headers.Authorization,'Key complete-private-key');if(opts.method==='POST'){submissions++;return Response.json({request_id:'single-key-request'});}return Response.json({status:'completed',video:{url:'https://media.example.com/test.mp4'}});
+ }});
+ assert.equal((await f.request('/api/state')).body.production.higgsfield,true);
+ const q=await f.request('/api/production','POST',{kind:'video',brandId:'brand',prompt:'A coastal road',aspect:'16:9'});assert.equal(q.status,202);assert.equal((await f.done(q.body.id)).job.status,'completed');assert.equal(submissions,1);
+ assert.ok(!JSON.stringify((await f.request('/api/state')).body).includes('complete-private-key'));assert.ok(!(await readFile(path.join(f.dir,'workspace.json'),'utf8')).includes('complete-private-key'));
+});
+
+test('logo-only render needs no font, ignores unused font choices and records no typography',async t=>{
+ const env={FFMPEG:process.env.FFMPEG||'ffmpeg'};if(!await rendererAvailable(env)){t.skip('FFmpeg needed');return;}
+ const f=await fixture(t,{env,mediaRenderer:renderAsset,fontCatalogProvider:async()=>[]});
+ const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAABAAAAAQBPJcTWAAAAIUlEQVR4nGP8y0AaYCFRPcOoBmIAC1GqkMCoBmIAyaEEAGgAATusqEGCAAAAAElFTkSuQmCC','base64');
+ await f.store.update(s=>{s.brands[0].font='Unavailable custom font';s.media.push({id:'logo',file:'logo',brandId:'brand',mime:'image/png',name:'Approved logo',status:'approved',version:1});});await writeFile(path.join(f.dir,'uploads','logo'),bytes);
+ const q=await f.request('/api/production','POST',{kind:'render',brandId:'brand',sourceId:'logo',logoId:'logo',branding:true,includeBrandText:false,fontId:'system:removed-font',aspect:'16:9'});assert.equal(q.status,202);
+ const result=await f.done(q.body.id);assert.equal(result.job.status,'completed',result.job.error);const final=result.state.media.find(m=>m.role==='rendered');assert.equal(final.width,1920);assert.equal(final.height,1080);assert.equal(final.renderingFont,undefined);assert.equal(result.job.production.fontId,'');assert.equal(result.job.production.systemFontId,'');assert.equal(result.job.reconciledCost,0);
 });
