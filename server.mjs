@@ -68,7 +68,8 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       const j=s.jobs.find(x=>x.id===work.id);j.finishedAt=now();j.tokens=result.tokens;j.costEstimate=result.costEstimate;
       if(!result.text.trim()) {j.status='failed';j.error='Provider returned no text. Check usage before retrying.';return;}
       const draft={id:id(),brandId:j.brandId,title:j.title,skill:j.skill,text:result.text,status:'draft',createdAt:now(),updatedAt:now(),version:1,versions:[],sources:result.sources,checks:quality(result.text,j.brandSnapshot)};
-      if(result.incomplete){draft.status='needs-review';j.status='incomplete';j.error='Provider reached its output limit. Partial draft saved for review.';}else j.status='completed';
+      const missingSources=skills.find(s=>s.id===j.skill)?.requiresWeb&&!result.sources.length;
+      if(result.incomplete||missingSources){draft.status='needs-review';j.status='incomplete';j.error=result.incomplete?'Provider reached its output limit. Partial draft saved for review.':'No web search sources were returned. Draft saved for review; do not treat it as verified current research.';}else j.status='completed';
       j.draftId=draft.id;s.drafts.unshift(draft);audit(s,'content.generated',draft.id);
      });
     }catch(e){await store.update(s=>{const j=s.jobs.find(x=>x.id===work.id);j.status='failed';j.finishedAt=now();j.error=e.name==='TimeoutError'?'Request timed out. Check provider billing before retrying.':e.message;if(j.type==='brand-research'&&!j.providerStartedAt)j.reconciledCost=0;});}
@@ -156,6 +157,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     if(p==='/api/jobs'&&req.method==='POST'){
      const b=await jsonBody(req),skill=skills.find(x=>x.id===b.skill);
      if(!skill||!providers.includes(b.provider))fail('Select a skill and provider.');
+     if(skill.requiresWeb&&b.provider!=='perplexity')fail('Trend research requires Perplexity with web search. Choose Perplexity and configure its API key and model in Settings.',409);
      if(!ready[b.provider])fail('Configure this provider’s API key in the server .env file.',409);
      const brief=str(b.brief,20000);if(!brief)fail('Add a brief or source content.');
      const job=await store.update(s=>{

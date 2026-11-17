@@ -22,9 +22,50 @@ async function untilDone(request,id){
  for(let i=0;i<200;i++){const s=(await request('/api/state')).body;const j=s.jobs.find(j=>j.id===id);if(j&&!['queued','running'].includes(j.status))return {state:s,job:j};await new Promise(r=>setTimeout(r,10));}
  throw new Error('Job failed to finish');
 }
+test('trend research blocks non-search providers before billing and flags missing source evidence',async t=>{
+ let calls=0,withSources=false;
+ const {request}=await fixture(t,{env:{PERPLEXITY_API_KEY:'mock'},fetcher:async(url,options)=>{
+  calls++;assert.deepEqual(JSON.parse(options.body).tools,[{type:'web_search'}]);
+  return Response.json({status:'completed',output:[...(withSources?[{type:'search_results',results:[{url:'https://example.com/trend'}]}]:[]),{type:'message',content:[{type:'output_text',text:'Research draft for review.'}]}],usage:{input_tokens:10,output_tokens:10}});
+ }});
+ const brand=(await request('/api/brands','POST',{name:'Research QA'})).body;
+ await request('/api/settings','PUT',{monthlyBudget:10,reservePerJob:1,providers:{perplexity:{model:'openai/example-model'}}});
+ const payload={brandId:brand.id,skill:'ig-viral',brief:'Travel trends'};
+ for(const provider of ['openai','anthropic']){
+  const rejected=await request('/api/jobs','POST',{...payload,provider});
+  assert.equal(rejected.status,409);assert.match(rejected.body.error,/requires Perplexity/);
+ }
+ assert.equal((await request('/api/state')).body.jobs.length,0);assert.equal(calls,0);
+ const start=await request('/api/jobs','POST',{...payload,provider:'perplexity'});
+ const missing=await untilDone(request,start.body.id);
+ assert.equal(missing.job.status,'incomplete');assert.match(missing.job.error,/No web search sources/);
+ assert.equal(missing.state.drafts[0].status,'needs-review');assert.equal(missing.state.usage.committed,1);
+ withSources=true;
+ const sourced=await request('/api/jobs','POST',{...payload,provider:'perplexity'});
+ const done=await untilDone(request,sourced.body.id);
+ assert.equal(done.job.status,'completed');assert.deepEqual(done.state.drafts[0].sources,['https://example.com/trend']);
+ assert.equal(calls,2);
+});
+test('all thirteen workflows save usable drafts through the HTTP queue with brand context',async t=>{
+ const {request}=await fixture(t,{env:{PERPLEXITY_API_KEY:'mock'},fetcher:async(url,options)=>{
+  const prompt=JSON.parse(JSON.parse(options.body).input);
+  assert.equal(prompt.brand.name,'Complete workflow QA');assert.equal(prompt.brand.forbiddenClaims,'guaranteed savings');
+  return Response.json({status:'completed',output:[{type:'search_results',results:[{url:'https://example.com/evidence'}]},{type:'message',content:[{type:'output_text',text:'Review this draft: '+prompt.task}]}],usage:{input_tokens:5,output_tokens:5}});
+ }});
+ const brand=(await request('/api/brands','POST',{name:'Complete workflow QA',forbiddenClaims:'guaranteed savings'})).body;
+ await request('/api/settings','PUT',{monthlyBudget:25,reservePerJob:1,providers:{perplexity:{model:'fast'}}});
+ const initial=(await request('/api/state')).body;
+ for(const skill of initial.skills){
+  const start=await request('/api/jobs','POST',{brandId:brand.id,skill:skill.id,provider:'perplexity',brief:'Supplied source material and metrics for '+skill.name});
+  assert.equal(start.status,202,skill.id);
+  const {job}=await untilDone(request,start.body.id);assert.equal(job.status,'completed',skill.id);
+ }
+ const final=(await request('/api/state')).body;
+ assert.equal(final.drafts.length,13);assert.equal(new Set(final.drafts.map(d=>d.skill)).size,13);
+});
 test('local developer HTTP boundaries and module checks',async t=>{
  const {request,base}=await fixture(t);
- const state=await request('/api/state');assert.equal(state.status,200);assert.equal(state.body.role,'developer-owner');assert.equal(state.body.appVersion,'0.1.5');
+ const state=await request('/api/state');assert.equal(state.status,200);assert.equal(state.body.role,'developer-owner');assert.equal(state.body.appVersion,'0.1.6');
  assert.equal((await fetch(base+'/api/state')).status,403);
  assert.equal((await request('/api/state','GET',undefined,{Origin:'https://evil.example'})).status,403);
  assert.equal((await request('/api/sniff/prospects')).status,403);
