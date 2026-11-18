@@ -1,3 +1,5 @@
+import {analyticsReport,analyticsCSV} from './lib/analytics.mjs';
+import {createPlan,findEntry,ensureEntryEditable,saveEntry,plannerPrompt,parsePlanOutput,plannerProduction} from './lib/planner.mjs';
 import {desktopPublishing} from './lib/desktop-publishing.mjs';
 import {prepareInstagramMedia} from './lib/publish-media.mjs';
 import {reconcilePublication} from './lib/publishing-history.mjs';
@@ -106,6 +108,18 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       await store.update(s=>{const j=s.jobs.find(j=>j.id===work.id);j.status='completed';j.phase='Suggestions ready for review';j.finishedAt=now();j.result=result;audit(s,'brand.suggestions_ready',j.id);});
       continue;
      }
+     if(work.type==='plan-day'){
+      const result=await generate(work.provider,work.config,work.prompt,{env,fetcher});
+      await store.update(s=>{const j=s.jobs.find(x=>x.id===work.id);j.tokens=result.tokens;j.costEstimate=result.costEstimate;j.resultText=result.text;});
+      if(result.incomplete)throw new Error('The proposal was truncated. No day was changed. Review Activity and billing before generating again.');
+      const fields=parsePlanOutput(result.text);
+      await store.update(s=>{const j=s.jobs.find(x=>x.id===work.id),{entry}=findEntry(s,j.plannerPlanId,j.plannerEntryId);
+       if(entry.version!==j.plannerEntryVersion)fail('The plan day changed. Generated output retained in Activity.',409);
+       entry.history.unshift({...entry,history:undefined});entry.history=entry.history.slice(0,25);
+       Object.assign(entry,fields,{status:'needs-review',version:entry.version+1,updatedAt:now()});
+       j.status='completed';j.finishedAt=now();audit(s,'plan.day_prepared',entry.id);
+      });continue;
+     }
      const result=await generate(work.provider,work.config,work.prompt,{env,fetcher});
      await store.update(s=>{
       const j=s.jobs.find(x=>x.id===work.id);j.finishedAt=now();j.tokens=result.tokens;j.costEstimate=result.costEstimate;
@@ -120,7 +134,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    }
   }finally{working=false;}
  }
- function publicState(){const s=store.read();return {...s,skills,production:{fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!higgsfieldCredential(env),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 3 beta · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
+ function publicState(){const s=store.read();return {...s,skills,production:{fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!higgsfieldCredential(env),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 4 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
  const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Cache-Control','no-store');
@@ -138,6 +152,26 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     if(p==='/api/state'&&req.method==='GET')return json(res,publicState());
     if(p.startsWith('/api/sniff')||p.startsWith('/api/integration'))fail('This module is not enabled in Phase 1.',403);
     if(!enabled.has('marketing'))fail('AI Marketing Studio is not enabled.',403);
+    if(p==='/api/analytics'&&req.method==='GET'){
+     const filters=Object.fromEntries(['brandId','accountId','from','to'].map(key=>[key,u.searchParams.get(key)||'']));
+     for(const k of ['from','to'])if(filters[k]&&!/^\d{4}-\d{2}-\d{2}$/.test(filters[k]))fail('Use valid UTC date filters.');
+     if(filters.from&&filters.to&&filters.from>filters.to)fail('The start date must precede the end date.');
+     const report=analyticsReport(store.read(),filters);
+     if(u.searchParams.get('export')==='csv'){res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="sniff-performance.csv"'});return res.end(analyticsCSV(report));}
+     return json(res,{...report,sync:store.read().analytics?.accounts||[],pulledAt:store.read().analytics?.pulledAt||null});
+    }
+    if(p==='/api/analytics/pull'&&req.method==='POST'){
+     const result=await publishing.insights();
+     await store.update(s=>{const allowed=new Set(s.brands.map(b=>b.id)),accounts=(result.accounts||[]).filter(a=>allowed.has(a.brand_id));
+      const snapshots=accounts.flatMap(a=>(a.document?.snapshots||[]).filter(x=>x.accountId===a.account_id&&x.brandId===a.brand_id));
+      s.analytics={snapshots,accounts:accounts.map(a=>({accountId:a.account_id,brandId:a.brand_id,lastAttemptAt:a.last_attempt_at,lastSuccessAt:a.last_success_at,nextSyncAt:a.next_sync_at,error:a.last_error,warnings:a.document?.warnings||[]})),pulledAt:now()};
+     });return json(res,{ok:true});
+    }
+    if(p==='/api/analytics/sync'&&req.method==='POST'){
+     const b=await jsonBody(req),accounts=(await publishing.accounts()).accounts;
+     if(!accounts.some(a=>a.id===b.accountId&&a.status==='connected'&&store.read().brands.some(b=>b.id===a.brand_id)))fail('Choose a connected account of an existing brand.',409);
+     return json(res,await publishing.syncInsights(b.accountId),202);
+    }
     if(p==='/api/social/accounts'&&req.method==='GET'){
      if(!publishing.configured)return json(res,{configured:false,accounts:[]});
      const result=await publishing.accounts();return json(res,{configured:true,accounts:result.accounts.filter(a=>store.read().brands.some(b=>b.id===a.brand_id))});
@@ -238,10 +272,42 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      return json(res,result);
     }
     if(p==='/api/fonts/refresh'&&req.method==='POST'){fontCatalog=await fontCatalogProvider({refresh:true});return json(res,publicFonts(fontCatalog));}
+    if(p==='/api/plans'&&req.method==='POST'){
+     const b=await jsonBody(req);const plan=await store.update(s=>{const plan=createPlan(s,b);(s.contentPlans??=[]).unshift(plan);audit(s,'plan.created',plan.id);return plan;});return json(res,plan,201);
+    }
+    if(/^\/api\/plans\/[^/]+\/days\/[^/]+$/.test(p)&&req.method==='PUT'){
+     const b=await jsonBody(req);return json(res,await store.update(s=>saveEntry(s,p.split('/')[3],p.split('/')[5],b)));
+    }
+    if(/^\/api\/plans\/[^/]+\/prepare$/.test(p)&&req.method==='POST'){
+     const b=await jsonBody(req),planId=p.split('/')[3];
+     if(!['openai','anthropic'].includes(b.provider)||!ready[b.provider])fail('Configure an OpenAI or Claude text model and key in Settings.',409);
+     const jobs=await store.update(s=>{
+      const plan=(s.contentPlans||[]).find(x=>x.id===planId);if(!plan)fail('Content plan not found.',404);
+      if(!Array.isArray(b.entryIds)||!b.entryIds.length||b.entryIds.length>7||new Set(b.entryIds).size!==b.entryIds.length)fail('Select one to seven distinct days.');
+      const entries=b.entryIds.map(eid=>findEntry(s,plan.id,eid).entry);for(const e of entries)ensureEntryEditable(s,e);
+      if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length+entries.length>10)fail('Queue is full. Prepare fewer days or wait for active requests.',409);
+      if(ledger(s).committed+entries.length*s.settings.reservePerJob>s.settings.monthlyBudget)fail('The remaining planning budget cannot reserve all selected days.',409);
+      const config=s.settings.providers[b.provider];if(!config?.model)fail('Choose a text model in Settings.',409);
+      const brand=s.brands.find(x=>x.id===plan.brandId);if(!brand)fail('Brand not found.',404);
+      const evidence=analyticsReport(s,{brandId:plan.brandId}).posts.slice(0,10).map(x=>({caption:x.caption,format:x.format,publishedAt:x.publishedAt,capturedAt:x.capturedAt,metrics:x.metrics,plannedLocalTime:(s.schedules||[]).find(p=>p.id===x.publicationId)?.localTime||null,interpretation:'Lifetime observations; account for age and small samples. Association does not establish cause.'}));
+      return entries.map(entry=>{const j={id:id(),type:'plan-day',skill:'content-planner',brandId:plan.brandId,title:plan.title+' · '+entry.localTime.slice(0,10),plannerPlanId:plan.id,plannerEntryId:entry.id,plannerEntryVersion:entry.version,provider:b.provider,config:structuredClone(config),prompt:plannerPrompt(plan,entry,brand,evidence),status:'queued',reservation:s.settings.reservePerJob,costEstimate:null,createdAt:now()};s.jobs.push(j);audit(s,'plan.day_queued',entry.id);return {id:j.id};});
+     });json(res,{jobs},202);setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
+    }
+    if(/^\/api\/plans\/[^/]+\/days\/[^/]+\/schedule$/.test(p)&&req.method==='POST'){
+     const b=await jsonBody(req),accounts=(await publishing.accounts()).accounts;
+     const item=await store.update(s=>{
+      const {plan,entry}=findEntry(s,p.split('/')[3],p.split('/')[5]);ensureEntryEditable(s,entry);
+      if(entry.status!=='approved'||b.version!==entry.version)fail('Approve the current day before scheduling.',409);
+      const m=s.media.find(m=>m.id===b.mediaId),j=s.jobs.find(j=>j.id===m?.jobId);
+      if(!j||j.plannerEntryId!==entry.id||j.plannerEntryVersion!==entry.version||m.role!=='rendered')fail('Choose finished media generated from this approved day.',409);
+      const record=validateSchedule(s,{brandId:plan.brandId,accountId:b.accountId,mediaId:m.id,caption:entry.caption,timezone:plan.timezone,localTime:entry.localTime},{accounts});
+      Object.assign(record,{plannerPlanId:plan.id,plannerEntryId:entry.id,plannerEntryVersion:entry.version});(s.schedules??=[]).unshift(record);audit(s,'schedule.created',record.id);return record;
+     });return json(res,item,201);
+    }
     if(p==='/api/production'&&req.method==='POST'){
      const b=await jsonBody(req);
      const job=await store.update(s=>{
-      const production=productionInput(b,s,fontCatalog),config=productionSettings(s.settings.production);
+      const plannerLink=plannerProduction(s,b),production=productionInput(b,s,fontCatalog),config=productionSettings(s.settings.production);
       if(!renderReady&&mediaRenderer===renderAsset)fail('FFmpeg is not configured. Use the complete Windows app or configure FFMPEG locally.',409);
       if(production.kind==='image'&&(!env.OPENAI_API_KEY||!config.imageModel))fail('Configure OPENAI_API_KEY locally and an image model in Settings.',409);
       if(production.kind==='video'&&!higgsfieldCredential(env))fail('Add HF_API_KEY (the complete copied Higgsfield API key) to your local API settings, then restart.',409);
@@ -249,7 +315,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       const reservation=production.kind==='render'?0:config.reserve*production.count;
       const available=Math.max(0,s.settings.monthlyBudget-ledger(s).committed);
       if(reservation>available)fail('This request needs a US$'+reservation.toFixed(2)+' planning reservation; US$'+available.toFixed(2)+' remains this month. Reduce the batch size, adjust the media reservation in Settings & Costs, or reconcile previous requests in Activity. No generation was started.',409);
-      const j={id:id(),type:'production',skill:production.kind+'-studio',brandId:production.brandSnapshot.id,title:production.title,production,provider:production.kind==='render'?'local':production.kind==='image'?'openai':'higgsfield',config:{model:production.kind==='render'?'FFmpeg':production.kind==='image'?config.imageModel:config.videoModel},status:'queued',phase:'Waiting for media worker',reservation,costEstimate:null,createdAt:now(),mediaIds:[]};s.jobs.push(j);audit(s,'production.queued',j.id);return j;
+      const j={id:id(),type:'production',...plannerLink,skill:production.kind+'-studio',brandId:production.brandSnapshot.id,title:production.title,production,provider:production.kind==='render'?'local':production.kind==='image'?'openai':'higgsfield',config:{model:production.kind==='render'?'FFmpeg':production.kind==='image'?config.imageModel:config.videoModel},status:'queued',phase:'Waiting for media worker',reservation,costEstimate:null,createdAt:now(),mediaIds:[]};s.jobs.push(j);audit(s,'production.queued',j.id);return j;
      });json(res,{id:job.id,status:job.status},202);setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
     }
     if(/^\/api\/production\/[^/]+\/recover$/.test(p)&&req.method==='POST'){
@@ -294,7 +360,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      const brandId=p.split('/').pop();
      await store.update(s=>{
       if(!s.brands.some(b=>b.id===brandId))fail('Brand not found.',404);
-      if(s.drafts.some(d=>d.brandId===brandId)||s.media.some(m=>m.brandId===brandId)||s.jobs.some(j=>j.brandId===brandId)||(s.schedules||[]).some(x=>x.brandId===brandId))fail('This brand has content, media or job history. Keep it to preserve those records.',409);
+      if((s.contentPlans||[]).some(p=>p.brandId===brandId)||s.drafts.some(d=>d.brandId===brandId)||s.media.some(m=>m.brandId===brandId)||s.jobs.some(j=>j.brandId===brandId)||(s.schedules||[]).some(x=>x.brandId===brandId))fail('This brand has content, media or job history. Keep it to preserve those records.',409);
       s.brands=s.brands.filter(b=>b.id!==brandId);audit(s,'brand.deleted',brandId);
      });return json(res,{ok:true});
     }
@@ -437,6 +503,8 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    staticFiles['/dictation.js']=['dictation.js','text/javascript; charset=utf-8'];
    staticFiles['/thumbnails.js']=['thumbnails.js','text/javascript; charset=utf-8'];
    staticFiles['/timing.js']=['timing.js','text/javascript; charset=utf-8'];
+   staticFiles['/planner.js']=['planner.js','text/javascript; charset=utf-8'];
+   staticFiles['/analytics.js']=['analytics.js','text/javascript; charset=utf-8'];
    staticFiles['/video-brief.js']=['video-brief.js','text/javascript; charset=utf-8'];
    staticFiles['/reconciliation.js']=['reconciliation.js','text/javascript; charset=utf-8'];
    const entry=staticFiles[p];if(!entry)fail('Not found.',404);

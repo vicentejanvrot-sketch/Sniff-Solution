@@ -13,6 +13,7 @@ export function bindVideoBrief(form,{state,api,send,money,onChange}){
  return {
   hasPlan,isBusy:()=>busy,sync,
   values:()=>({prompt:form.elements.preparedPrompt.value.trim(),originalPrompt:form.elements.prompt.value.trim(),videoBriefDraftId:plan?.draftId||''}),
+  loadPlanner(entry){form.elements.preparedPrompt.value=entry.prompt;plan={draftId:'',fingerprint:fingerprint()};status.textContent='Approved planner brief loaded. No additional text preparation is required.';form.querySelector('#prepare-video-again').disabled=true;form.elements.preparedPrompt.readOnly=true;sync();},
   restore(draft){if(!draft.videoBrief)return false;form.elements.prompt.value=draft.videoBrief.originalPrompt;form.elements.duration.value=String(draft.videoBrief.duration);form.elements.aspect.value=draft.videoBrief.aspect;form.elements.preparedPrompt.value=draft.text;plan=draft.status==='needs-review'?null:{draftId:draft.id,fingerprint:fingerprint()};status.textContent=plan?'Saved prepared brief loaded. Review it before generating.':'This saved brief is incomplete. Prepare a new version.';sync();onChange();return true;},
   async prepareIfNeeded(){
    if(hasPlan())return false;if(busy)return true;

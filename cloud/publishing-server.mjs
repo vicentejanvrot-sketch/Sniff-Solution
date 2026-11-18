@@ -1,3 +1,4 @@
+import {createInsights} from '../lib/insights.mjs';
 // Separate public cloud process; never imports or exposes the desktop server.
 import http from 'node:http';
 import {pathToFileURL} from 'node:url';
@@ -24,7 +25,7 @@ export function connectionConfig(env){
  if(!ownerKey||ownerKey.length<32||! /^[A-Za-z0-9+/]{43}=$/.test(encryptionKey||''))throw new Error('Authorization secrets are incomplete.');
  if(!/^\d+$/.test(appId)||!/^\d+$/.test(configurationId)||redirectUri!=='https://sniff-publishing.onrender.com/auth/meta/callback')throw new Error('Invalid Meta configuration.');
  return {appId,configurationId,redirectUri,encryptionKey,ownerKey,workspaceId:env.WORKSPACE_ID||'developer',
- states:createPublishingStateStore({url,key}),meta:createMetaClient({appId,appSecret,redirectUri,apiVersion}),saveAccount:createAccountWriter({url,key}),accounts:createSocialRepository({url,key}),publishingEnabled:env.PUBLISHING_ENABLED==='true',publisher:createCloudPublisher({url,key,workspaceId:env.WORKSPACE_ID||'developer',encryptionKey,apiVersion})};
+ states:createPublishingStateStore({url,key}),meta:createMetaClient({appId,appSecret,redirectUri,apiVersion}),saveAccount:createAccountWriter({url,key}),accounts:createSocialRepository({url,key}),insights:env.INSIGHTS_ENABLED==='true'?createInsights({url,key,workspaceId:env.WORKSPACE_ID||'developer',encryptionKey,apiVersion}):null,publishingEnabled:env.PUBLISHING_ENABLED==='true',publisher:createCloudPublisher({url,key,workspaceId:env.WORKSPACE_ID||'developer',encryptionKey,apiVersion})};
 }
 export function createPublishingServer({connection=null}={}){
  return http.createServer(async(req,res)=>{
@@ -50,6 +51,20 @@ export function createPublishingServer({connection=null}={}){
     return send(405,{error:'Method not allowed'});
    }catch{return send(400,{error:'Social account operation failed.'});}
   }
+  if(url.pathname.startsWith('/api/insights/')){
+   if(!connection)return send(503,{error:'Cloud service unavailable.'});
+   if(!equal(req.headers.authorization,'Bearer '+connection.ownerKey))return send(401,{error:'Unauthorized'});
+   if(!connection.insights)return send(409,{error:'Enable Insights on the cloud service after installing the Phase 4 schema.'});
+   try{
+    if(url.pathname==='/api/insights/snapshots'&&req.method==='GET')return send(200,{accounts:await connection.insights.list()});
+    if(url.pathname==='/api/insights/sync'&&req.method==='POST'){
+     let length=0;const chunks=[];for await(const chunk of req){length+=chunk.length;if(length>4096)return send(413,{error:'Request too large'});chunks.push(chunk);}
+     const b=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(typeof b.accountId!=='string'||! /^[a-f0-9-]{36}$/i.test(b.accountId))return send(400,{error:'Choose an account.'});
+     void connection.insights.sync(b.accountId,{force:true}).catch(()=>{});return send(202,{queued:true,message:'Synchronization requested. Refresh results shortly. Requests are limited to once per five minutes per account.'});
+    }
+    return send(405,{error:'Method not allowed'});
+   }catch{return send(503,{error:'Insights unavailable. Check the Phase 4 schema and backend configuration.'});}
+  }
   if(url.pathname.startsWith('/api/publishing/')){
    if(!connection||!connection.publisher)return send(503,{error:'Publishing service unavailable.'});
    const action=url.pathname.slice('/api/publishing/'.length);
@@ -71,6 +86,7 @@ export function createPublishingServer({connection=null}={}){
     if(!connection.publishingEnabled)return send(409,{error:'Cloud publishing is disabled.'});
     try{
      const processed=await connection.publisher.pump();
+     if(connection.insights)void connection.insights.sync().catch(()=>{});
      connection.lastWakeAt=new Date().toISOString();
      return send(200,{ok:true,processed,checkedAt:connection.lastWakeAt});
     }catch(e){return send(503,{error:'Publishing check failed. Review cloud health and logs.'});}
@@ -122,8 +138,8 @@ export function createPublishingServer({connection=null}={}){
  });
 }
 export function startPublishingWorker(connection,{schedule=setInterval,logger=console}={}){
- if(!connection?.publishingEnabled)return null;
- const pump=()=>Promise.resolve().then(()=>connection.publisher.pump()).catch(e=>logger.error('Publishing worker check failed:',e.message));
+ if(!connection?.publishingEnabled&&!connection?.insights)return null;
+ const pump=()=>Promise.resolve().then(async()=>{if(connection.publishingEnabled)await connection.publisher.pump();if(connection.insights)await connection.insights.sync();}).catch(e=>logger.error('Publishing worker check failed:',e.message));
  void pump();
  const interval=schedule(pump,30000);
  interval?.unref?.();

@@ -1,4 +1,4 @@
-# Sniff Solution · Phase 2
+# Sniff Solution · Phase 4
 
 A single-developer AI Marketing Studio: brand profiles, thirteen Instagram content workflows, persistent drafts and editorial review, a private media library, provider jobs, usage estimates and module gates.
 
@@ -162,3 +162,14 @@ Activity keeps a formatted elapsed time after completion or failure. This covers
 
 
 Media Library now shows locally decoded first-frame thumbnails for MP4 videos as well as image thumbnails. Thumbnail and media preview backgrounds are plain white, including unused space and transparent image areas. Original files and download transparency are preserved.
+
+
+## 0.4.0 daily content planning and performance
+
+Content Planner saves up to seven individually selected posting dates and times per plan. Each day has a topic, purpose, editable production brief, optional one-line rendering overlay and actual public Instagram caption. Prepare unfinished days uses a separate text request/reservation for each day. Regenerate one day preserves previous text versions and requires another review. Manual planning works without provider keys. Reels currently use a single 5 or 10 second clip.
+
+Approve a day, open its Image/Video Studio, review options and select Start production for a separate media request. The exact approved brief and caption are carried forward. Finished outputs require Media Library approval. Return to the plan and choose the approved output and connected account to create a local schedule at the planned time. Live activation remains a separate explicit action in Publishing Calendar. Editing an approved day creates a new version; previously produced outputs remain preserved but belong to the earlier version.
+
+Performance collects Instagram account daily metrics and lifetime observations for up to 20 recent Sniff-published posts per account in the last 90 days. It shows date/account/brand filters, format comparisons, engagement calculations, account history, capture times, missing metrics, sync errors and CSV export. Post date filters select publication cohorts; account filters select UTC metric days. Daily post snapshots replace same-day observations and retain previous days for up to a year (8,000 observations/account cap). Missing metrics stay unavailable, never invented zeros. Performance evidence is included in future planner text preparation as observations; recommendations are experiments, not automatic actions or causal claims.
+
+Cloud analytics requires the additive private schema in db/phase4_insights.sql, the Phase 4 cloud code, INSIGHTS_ENABLED=true on the existing Render service and appropriate Meta Insights permissions. No new service is provisioned. Background sync runs while the existing cloud process is awake, at most once per six hours per account; manual refresh has a five-minute cooldown. Existing signed publishing wake requests also trigger a due Insights check after publishing. Account history starts with collection; no full historical backfill, external-post import, follower demographics, ad reporting or conversion attribution is implemented. See [PHASE4_TEST_GUIDE.md](PHASE4_TEST_GUIDE.md).

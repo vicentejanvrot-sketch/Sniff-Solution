@@ -1,3 +1,5 @@
+import {mountPlanner} from './planner.js';
+import {mountAnalytics} from './analytics.js';
 import {mountSocial} from './social.js';
 import {mountCalendar} from './calendar.js';
 import {elapsedLabel} from './timing.js';
@@ -6,6 +8,7 @@ import {mountStudio,visibleMedia} from './production.js';
 import {stopDictation} from './dictation.js';
 import {clearThumbnails,thumbnailHTML,loadThumbnails} from './thumbnails.js';
 const app=document.querySelector('#app'),modal=document.querySelector('#modal');
+let plannerProductionSelection=null;
 let state,page='dashboard',activeBrand=localStorage.getItem('sniff-brand')||'',activeSkill='',activeDraft='',toastTimer;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>v==null?'Unpriced':'US$'+Number(v).toFixed(4);
@@ -20,14 +23,14 @@ async function api(url,options={}){
  return response.headers.get('content-type')?.includes('application/json')?response.json():response.blob();
 }
 const send=(url,method,data)=>api(url,{method,body:JSON.stringify(data)});
-async function refresh(){state=await api('/api/state');if(activeBrand&&!state.brands.some(b=>b.id===activeBrand))activeBrand='';if(!activeBrand&&state.brands.length===1)activeBrand=state.brands[0].id;}
+async function refresh(){state=await api('/api/state');if(activeBrand&&!state.brands.some(b=>b.id===activeBrand))activeBrand='';if(!activeBrand&&state.brands.length===1)activeBrand=state.brands[0].id;return state;}
 function navigate(next){page=next;activeSkill='';render();}
 function heading(title,description,action=''){return '<div class="heading"><div><div class="eyebrow">AI Marketing Studio</div><h1>'+esc(title)+'</h1><p>'+esc(description)+'</p></div>'+action+'</div>';}
 function empty(title,text,button=''){return '<div class="empty"><h3>'+esc(title)+'</h3><p>'+esc(text)+'</p>'+button+'</div>';}
 function brandOptions(){return '<option value="">Choose a brand</option>'+state.brands.map(b=>'<option value="'+b.id+'" '+(b.id===activeBrand?'selected':'')+'>'+esc(b.name)+'</option>').join('');}
 function render(){
- const nav=[['dashboard','Workspace'],['brands','Brand Studio'],['skills','Content Skills'],['images','Image Studio'],['video','Video Studio'],['drafts','Drafts & Review'],['media','Media Library'],['social','Social Accounts'],['calendar','Publishing Calendar'],['jobs','Activity'],['settings','Settings & Costs']];
- app.innerHTML='<div class="layout"><aside><div class="logo"><span class="mark">S</span><div><strong>Sniff Solution</strong><small>YOUR GROWTH WORKSPACE</small></div></div><nav aria-label="Main navigation">'+nav.map(([id,label])=>'<button data-page="'+id+'" class="'+(page===id?'active':'')+'" '+(page===id?'aria-current="page"':'')+'>'+label+(id==='jobs'?'<span id="job-count">'+state.jobs.filter(j=>['queued','running'].includes(j.status)).length+'</span>':'')+'</button>').join('')+'</nav><div class="side-note">Phase 3 beta · v'+esc(state.appVersion||'restart required')+(state.sourceCommit?' · build '+esc(state.sourceCommit.slice(0,7)):'')+'<br>One owner. Your brands. Your ideas.<br><br>Storage: '+esc(state.storageMode)+'<br>Phase 3 development preview.</div></aside><div><header><strong>Your next good idea starts here.</strong><div class="controls"><label class="sr-only" for="brand-switch">Active brand</label><select id="brand-switch"><option value="">All brands</option>'+state.brands.map(b=>'<option value="'+b.id+'" '+(b.id===activeBrand?'selected':'')+'>'+esc(b.name)+'</option>').join('')+'</select><span class="pill" id="app-version" title="'+esc(state.build||'')+'">v'+esc(state.appVersion||'restart required')+'</span><span class="pill">Developer owner</span><span class="avatar" aria-label="Vicente Miranda">VM</span></div></header><main id="main"></main></div></div>';
+ const nav=[['dashboard','Workspace'],['brands','Brand Studio'],['planner','Content Planner'],['analytics','Performance'],['skills','Content Skills'],['images','Image Studio'],['video','Video Studio'],['drafts','Drafts & Review'],['media','Media Library'],['social','Social Accounts'],['calendar','Publishing Calendar'],['jobs','Activity'],['settings','Settings & Costs']];
+ app.innerHTML='<div class="layout"><aside><div class="logo"><span class="mark">S</span><div><strong>Sniff Solution</strong><small>YOUR GROWTH WORKSPACE</small></div></div><nav aria-label="Main navigation">'+nav.map(([id,label])=>'<button data-page="'+id+'" class="'+(page===id?'active':'')+'" '+(page===id?'aria-current="page"':'')+'>'+label+(id==='jobs'?'<span id="job-count">'+state.jobs.filter(j=>['queued','running'].includes(j.status)).length+'</span>':'')+'</button>').join('')+'</nav><div class="side-note">Phase 4 · v'+esc(state.appVersion||'restart required')+(state.sourceCommit?' · build '+esc(state.sourceCommit.slice(0,7)):'')+'<br>One owner. Your brands. Your ideas.<br><br>Storage: '+esc(state.storageMode)+'<br>Plan, publish and learn.</div></aside><div><header><strong>Your next good idea starts here.</strong><div class="controls"><label class="sr-only" for="brand-switch">Active brand</label><select id="brand-switch"><option value="">All brands</option>'+state.brands.map(b=>'<option value="'+b.id+'" '+(b.id===activeBrand?'selected':'')+'>'+esc(b.name)+'</option>').join('')+'</select><span class="pill" id="app-version" title="'+esc(state.build||'')+'">v'+esc(state.appVersion||'restart required')+'</span><span class="pill">Developer owner</span><span class="avatar" aria-label="Vicente Miranda">VM</span></div></header><main id="main"></main></div></div>';
  document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
  document.querySelector('#brand-switch').onchange=e=>{activeBrand=e.target.value;localStorage.setItem('sniff-brand',activeBrand);activeDraft='';renderPage();};
  renderPage();
@@ -43,9 +46,11 @@ function renderPage(){
  if(page==='media')media(main);
  if(page==='jobs')jobs(main);
  if(page==='settings')settings(main);
+ if(page==='planner')mountPlanner(main,{state,activeBrand,esc,heading,api,send,refresh,navigate,toast,preview:previewMedia,startPlanProduction:(plan,entry)=>{plannerProductionSelection={plan,entry};activeBrand=plan.brandId;navigate(entry.format==='reel'?'video':'images');}});
+ if(page==='analytics')mountAnalytics(main,{state,activeBrand,esc,heading,api,send,refresh,toast});
  if(page==='calendar')mountCalendar(main,{state,activeBrand,esc,heading,api,send,refresh,toast});
  if(page==='social')mountSocial(main,{state,activeBrand,esc,heading,brandOptions,api,send,toast});
- if(['images','video'].includes(page))mountStudio(main,{state,kind:page==='video'?'video':'image',activeBrand,esc,heading,brandOptions,send,api,refresh,navigate,toast,money,preview:previewMedia});
+ if(['images','video'].includes(page))mountStudio(main,{state,kind:page==='video'?'video':'image',activeBrand,esc,heading,brandOptions,send,api,refresh,navigate,toast,money,preview:previewMedia,plannerSelection:plannerProductionSelection});plannerProductionSelection=null;
  if(!state.appVersion){const notice=document.createElement('div');notice.className='note warning';notice.textContent='Updated files detected, but the old server is still running. Quit Sniff Solution from its tray icon, then run START_SNIFF.cmd from the updated app folder.';main.prepend(notice);}
 }
 function dashboard(el){

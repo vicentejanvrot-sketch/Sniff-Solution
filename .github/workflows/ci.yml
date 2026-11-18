@@ -46,3 +46,7 @@ jobs:
         env:
           NODE_PATH: /tmp/sniff-browser/node_modules
         run: node test/browser-smoke.cjs
+      - name: Phase 4 planner and analytics browser verification
+        env:
+          NODE_PATH: /tmp/sniff-browser/node_modules
+        run: node test/phase4-browser.cjs

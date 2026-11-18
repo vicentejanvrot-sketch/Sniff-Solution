@@ -3,8 +3,12 @@ SNIFF SOLUTION - COMPLETE APP FOLDER
 This ZIP is the complete runnable Windows app: SniffSolution.exe,
 START_SNIFF.cmd, all app files, and bundled Node.js, Python, FFmpeg and FFprobe.
 VERSION.txt and build-info.json show its version and source commit.
-This update is version 0.3.0-beta.7 (development prerelease). Social Accounts and Publishing Calendar support protected cloud activation per approved post. Live publishing requires explicit cloud setup and verification; no existing schedules are activated automatically. This update fixes the Publishing Calendar refresh error caused by missing Publishing history elements. After refreshing cloud publishing status, confirmed Instagram post IDs, timestamps and verified links appear in Publishing history. See PHASE3_CALENDAR_TEST_GUIDE.md. PHASE2_TEST_GUIDE.md contains the complete
-step-by-step acceptance tests and remaining external requirements.
+This update is version 0.4.0. Content Planner connects individually reviewed
+posting-day briefs and Instagram captions to production and local scheduling.
+Performance shows private Instagram Insights observations after cloud setup.
+Existing accounts, schedules, media, keys and records are preserved. No plan is
+automatically generated, approved or activated for publishing by this update.
+See PHASE4_TEST_GUIDE.md for setup, verification and current limits.
 (GitHub "Code > Download ZIP" / "Source code" archives are NOT this app.)
 
 UPDATE
