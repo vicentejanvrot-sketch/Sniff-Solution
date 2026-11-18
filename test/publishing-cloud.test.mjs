@@ -40,3 +40,25 @@ test('authorization state is brand-bound, expiring and single-use',()=>{
  const expired=states.issue(context);now+=101;assert.equal(states.consume(expired),null);
  assert.equal(states.consume('invalid'),null);
 });
+
+test('protected authorization flow saves encrypted token and rejects replay',async t=>{
+ const key=randomBytes(32).toString('base64'),ownerKey=randomBytes(32).toString('base64');
+ const memory=new LoginStates(),saved=[];
+ const states={issue:async c=>memory.issue({workspaceId:c.workspaceId,brandId:c.brandId,workspace_id:c.workspaceId,brand_id:c.brandId,expected_username:c.expectedUsername}),consume:async s=>memory.consume(s)};
+ const connection={appId:'1436334624843806',configurationId:'1828125495054410',redirectUri:'https://sniff-publishing.onrender.com/auth/meta/callback',workspaceId:'developer',ownerKey,encryptionKey:key,states,meta:{exchange:async()=>({token:'mock-private-token'}),accounts:async()=>[{id:'123',username:'travelonepro'}]},saveAccount:async a=>saved.push(a)};
+ const server=createPublishingServer({connection});server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const base='http://127.0.0.1:'+server.address().port;
+ const start=(auth,expectedUsername='travelonepro')=>fetch(base+'/auth/meta/start',{method:'POST',headers:{'Content-Type':'application/json',...(auth?{Authorization:'Bearer '+auth}:{})},body:JSON.stringify({brandId:'travel',expectedUsername})});
+ assert.equal((await start()).status,401);
+ const initiated=await start(ownerKey);assert.equal(initiated.status,200);
+ const state=new URL((await initiated.json()).loginUrl).searchParams.get('state');
+ const callback=base+'/auth/meta/callback?code=mock&state='+state;
+ const response=await fetch(callback);assert.equal(response.status,200);assert.equal((await response.json()).username,'travelonepro');
+ assert.equal(saved.length,1);assert.notEqual(saved[0].token_ciphertext,'mock-private-token');
+ assert.equal(decryptToken(saved[0].token_ciphertext,key,'developer:travel:123'),'mock-private-token');
+ assert.equal((await fetch(callback)).status,400);assert.equal(saved.length,1);
+ const wrong=await start(ownerKey,'anotherbrand');
+ const wrongState=new URL((await wrong.json()).loginUrl).searchParams.get('state');
+ assert.equal((await fetch(base+'/auth/meta/callback?code=mock&state='+wrongState)).status,400);assert.equal(saved.length,1);
+});
