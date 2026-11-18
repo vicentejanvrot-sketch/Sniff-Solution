@@ -4,6 +4,7 @@ const dateLabel=d=>d.toLocaleDateString(undefined,{month:'long',year:'numeric'})
 const clampDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const timeZone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Edmonton';
 const zoneChoices=()=>Array.from(new Set(['America/Edmonton','UTC',...(Intl.supportedValuesOf?.('timeZone')||['America/Vancouver','America/Denver','America/Chicago','America/New_York','America/Toronto','Europe/London','Asia/Tokyo'])])).sort((a,b)=>a==='America/Edmonton'?-1:b==='America/Edmonton'?1:a.localeCompare(b));
+const defaultLocalClock=zone=>{if(zone==='America/Edmonton')return new Date(Date.now()-21600000).toISOString().slice(0,16);const parts=new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());const p=Object.fromEntries(parts.filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return p.year+'-'+p.month+'-'+p.day+'T'+p.hour+':'+p.minute;};
 const currentZoneClock=zone=>{if(zone==='America/Edmonton')return new Date(Date.now()-21600000).toISOString().slice(11,16)+' (UTC−06:00, Alberta Time)';try{return new Intl.DateTimeFormat('en-CA',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date());}catch{return 'Unavailable';}};
 const zoneOptions=selected=>zoneChoices().map(z=>'<option value="'+z+'" '+(selected===z?'selected':'')+'>'+z.replaceAll('_',' ')+(z==='America/Edmonton'?' — Alberta Time (UTC−06:00 permanent)':'')+'</option>').join('');
 const dateAt=(base,days)=>new Date(base.getFullYear(),base.getMonth(),base.getDate()+days);
@@ -14,9 +15,9 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
  let mode='month',cursor=clampDay(new Date()),items=state.schedules||[],accounts=[],editing=null;
  const media=()=>state.media.filter(m=>m.status==='approved'&&['image/png','image/jpeg','video/mp4'].includes(m.mime));
  const drafts=()=>state.drafts.filter(d=>d.status==='approved');
- el.innerHTML=heading('Publishing Calendar','Schedule approved Instagram content. Live publishing is disabled.')+
+ el.innerHTML=heading('Publishing Calendar','Review schedules and optionally activate individual posts for live Instagram publishing.')+
  '<div class="calendar-bar card"><div class="actions"><button id="cal-prev" aria-label="Previous period">←</button><button id="cal-today">Today</button><button id="cal-next" aria-label="Next period">→</button></div><h2 id="cal-period"></h2><div class="actions"><select id="cal-view" aria-label="Calendar view"><option value="month">Month</option><option value="week">Week</option><option value="day">Day</option></select><button class="primary" id="cal-create">+ Schedule post</button></div></div>'+
- '<div class="note">Only approved JPEG, PNG and MP4 assets may be scheduled. Posts stay in the calendar until publishing is explicitly enabled in a later release.</div><div id="cal-body" class="card"></div><div class="section-title"><h2>Publication queue</h2><span id="cal-count"></span></div><div id="cal-list" class="card"></div><div id="cal-form-area"></div>';
+ '<div class="note">Scheduling remains local until you explicitly activate an approved future post for cloud publishing. Activation makes that post eligible for public Instagram publishing when due. The cloud worker must also be enabled in Render.</div><div id="cal-body" class="card"></div><div class="section-title"><h2>Publication queue</h2><span id="cal-count"></span></div><div id="cal-list" class="card"></div><div id="cal-form-area"></div>';
  const q=id=>el.querySelector(id),visible=()=>items.filter(x=>!activeBrand||x.brandId===activeBrand);
  function tile(entry){
   return '<button class="cal-event" data-id="'+esc(entry.id)+'" title="'+esc(entry.caption)+'"><strong>'+esc(entry.localTime.slice(11))+'</strong> · '+esc(entry.username||'Instagram')+'<small>'+esc(statusLabel(entry.status))+'</small></button>';
@@ -47,7 +48,7 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
   q('#cal-count').textContent=sorted.length+' posts';
   q('#cal-list').innerHTML=sorted.length?'<div class="table-wrap"><table><thead><tr><th>Scheduled for</th><th>Brand / account</th><th>Asset</th><th>Status</th><th>Action</th></tr></thead><tbody>'+sorted.map(x=>{
    const b=state.brands.find(v=>v.id===x.brandId),m=state.media.find(v=>v.id===x.mediaId);
-   return '<tr><td>'+esc(x.localTime.replace('T',' '))+'<small>'+esc(x.timezone)+'</small></td><td>'+esc(b?.name||'Deleted brand')+'<small>@'+esc(x.username)+'</small></td><td>'+esc(m?.name||'Missing media')+'</td><td>'+esc(statusLabel(x.status))+'</td><td><button data-id="'+esc(x.id)+'">'+(x.status==='scheduled'?'Edit':'View')+'</button></td></tr>';
+   return '<tr><td>'+esc(x.localTime.replace('T',' '))+'<small>'+esc(x.timezone)+'</small></td><td>'+esc(b?.name||'Deleted brand')+'<small>@'+esc(x.username)+'</small></td><td>'+esc(m?.name||'Missing media')+'</td><td>'+esc(statusLabel(x.status))+'</td><td><button data-id="'+esc(x.id)+'">'+(x.status==='scheduled'&&!x.activationState?'Edit':'View')+'</button></td></tr>';
   }).join('')+'</tbody></table></div>':'<p class="hint">No scheduled posts. Approve media in Media Library, then select Schedule post.</p>';
   el.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>openForm(items.find(x=>x.id===b.dataset.id)));
   el.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{cursor=new Date(b.dataset.date+'T12:00:00');mode='day';q('#cal-view').value=mode;draw();});
@@ -82,10 +83,10 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
  function closeForm(){editing=null;if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=null;q('#cal-form-area').replaceChildren();}
  function openForm(record=null){
   editing=record;
-  const canEdit=!record||record.status==='scheduled';
+  const canEdit=!record||(record.status==='scheduled'&&!record.activationState);
   const brands=state.brands.filter(b=>!activeBrand||b.id===activeBrand);
   const initialBrand=record?.brandId||activeBrand||brands[0]?.id||'';
-  const nextHour=new Date(Date.now()+3600000);const chosenDate=dateKey(cursor)===dateKey(new Date())?nextHour:cursor;const t=record?.localTime||(dateKey(chosenDate)+'T'+(dateKey(cursor)===dateKey(new Date())?pad(nextHour.getHours())+':'+pad(nextHour.getMinutes()):'12:00'));
+  const selectedZone=record?.timezone||timeZone();const nextHour=defaultLocalClock(selectedZone);const t=record?.localTime||(dateKey(cursor)===dateKey(new Date())?nextHour.slice(0,11)+pad((Number(nextHour.slice(11,13))+1)%24)+nextHour.slice(13):dateKey(cursor)+'T12:00');
   q('#cal-form-area').innerHTML='<section class="card cal-editor"><div class="section-title"><h2>'+ (record?'Publication details':'Schedule a publication')+'</h2><button id="cal-close">Close</button></div><form id="cal-form" class="stack"><div class="form-grid"><label>Brand<select name="brandId" required '+(record?'disabled':'')+'>'+optionList(brands,initialBrand,b=>b.name)+'</select></label><label>Instagram account<select name="accountId" required></select></label><label>Approved image or video<select name="mediaId" required></select></label><label>Approved draft (optional)<select name="draftId"></select></label><label>Local date and time<input type="datetime-local" name="localTime" value="'+esc(t)+'" required></label><label>Time zone<select name="timezone" required>'+zoneOptions(record?.timezone||timeZone())+'</select><small id="cal-zone-clock" class="hint"></small></label></div><label>Caption and hashtags<textarea name="caption" maxlength="2200" required>'+esc(record?.caption||'')+'</textarea></label><div id="cal-preview" class="cal-preview"></div><p class="hint">Calendar scheduling only. This version does not send posts to Instagram. Times that are ambiguous due to daylight saving changes are rejected.</p><div class="actions">'+(canEdit?'<button class="primary" type="submit">'+(record?'Save changes':'Schedule post')+'</button>':'')+(record?.status==='scheduled'?'<button class="danger" type="button" id="cal-cancel">Cancel publication</button>':'')+'</div></form></section>';
   const form=q('#cal-form');form.elements.brandId.value=initialBrand;
   const updateZoneClock=()=>{const output=q('#cal-zone-clock');if(output)output.textContent='Current local time: '+currentZoneClock(form.elements.timezone.value);};
@@ -93,7 +94,13 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
   form.elements.brandId.onchange=()=>{editing=null;updateForm();};
   updateForm();
   q('#cal-close').onclick=closeForm;
-  if(!canEdit){form.querySelectorAll('input,select,textarea').forEach(x=>x.disabled=true);return;}
+  if(!canEdit){form.querySelectorAll('input,select,textarea').forEach(x=>x.disabled=true);}
+  if(record?.status==='scheduled'&&!record.activationState)q('#cal-activate').onclick=async()=>{
+   if(!confirm('Activate this approved post for live Instagram publishing at the scheduled time? This is a PUBLIC action and cannot be undone after publishing begins.'))return;
+   const button=q('#cal-activate');button.disabled=true;
+   try{await send('/api/schedules/'+record.id+'/activate','POST',{});await refresh();items=await api('/api/schedules');closeForm();draw();toast('Cloud publication activated.');}catch(err){toast(err.message,true);button.disabled=false;}
+  };
+  if(!canEdit)return;
   if(record?.status==='scheduled')q('#cal-cancel').onclick=async()=>{
    if(!confirm('Cancel this scheduled publication? No content will be sent.'))return;
    try{await send('/api/schedules/'+record.id+'/cancel','POST',{version:record.version});await refresh();items=await api('/api/schedules');closeForm();draw();toast('Publication cancelled.');}
@@ -112,6 +119,7 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
  q('#cal-next').onclick=()=>{cursor=mode==='month'?new Date(cursor.getFullYear(),cursor.getMonth()+1,1):dateAt(cursor,mode==='week'?7:1);draw();};
  q('#cal-today').onclick=()=>{cursor=clampDay(new Date());draw();};
  q('#cal-create').onclick=()=>openForm();
+ q('#cal-sync').onclick=async()=>{const button=q('#cal-sync');button.disabled=true;try{items=await send('/api/schedules/sync','POST',{});await refresh();draw();toast('Cloud publishing status refreshed.');}catch(err){toast(err.message,true);}finally{button.disabled=false;}};
  draw();
  api('/api/social/accounts').then(v=>{accounts=v.accounts||[];if(q('#cal-form'))updateForm();if(!accounts.length)toast('Connect an Instagram account in Social Accounts before scheduling.',true);}).catch(e=>toast(e.message,true));
 }
