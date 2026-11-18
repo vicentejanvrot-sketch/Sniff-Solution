@@ -1,7 +1,7 @@
 // Separate public cloud process; never imports or exposes the desktop server.
 import http from 'node:http';
 import {pathToFileURL} from 'node:url';
-import {createHash,timingSafeEqual} from 'node:crypto';
+import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
 import {createSocialRepository} from '../lib/social-repository.mjs';
 import {createCloudPublisher} from '../lib/publish-cloud.mjs';
 import {metaLoginUrl} from '../lib/meta-login.mjs';
@@ -9,6 +9,15 @@ import {createPublishingStateStore} from '../lib/publishing-state-store.mjs';
 import {createMetaClient,createAccountWriter,completeMetaConnection} from '../lib/meta-connection.mjs';
 const digest=s=>createHash('sha256').update(s).digest();
 const equal=(a,b)=>typeof a==='string'&&typeof b==='string'&&timingSafeEqual(digest(a),digest(b));
+export function verifiedCronWake(headers,key,now=Date.now()){
+ const ts=headers['x-sniff-timestamp'];
+ const signature=headers['x-sniff-signature'];
+ if(typeof key!=='string'||key.length<32||typeof ts!=='string'||!/^[0-9]{10,13}$/.test(ts)||typeof signature!=='string'||!/^[a-f0-9]{64}$/.test(signature))return false;
+ const epoch=Number(ts)*1000;
+ if(!Number.isSafeInteger(epoch)||Math.abs(now-epoch)>120000)return false;
+ const expected=createHmac('sha256',key).update(ts+'.{}').digest('hex');
+ return timingSafeEqual(Buffer.from(signature,'hex'),Buffer.from(expected,'hex'));
+}
 export function connectionConfig(env){
  if(env.META_AUTH_ENABLED!=='true')return null;
  const {META_APP_ID:appId,META_CONFIGURATION_ID:configurationId,META_REDIRECT_URI:redirectUri,META_APP_SECRET:appSecret,META_GRAPH_API_VERSION:apiVersion,SUPABASE_URL:url,SUPABASE_SECRET_KEY:key,PUBLISHING_TOKEN_ENCRYPTION_KEY:encryptionKey,PUBLISHING_OWNER_KEY:ownerKey}=env;
@@ -43,8 +52,9 @@ export function createPublishingServer({connection=null}={}){
   }
   if(url.pathname.startsWith('/api/publishing/')){
    if(!connection||!connection.publisher)return send(503,{error:'Publishing service unavailable.'});
-   if(!equal(req.headers.authorization,'Bearer '+connection.ownerKey))return send(401,{error:'Unauthorized'});
    const action=url.pathname.slice('/api/publishing/'.length);
+   const cronWake=action==='wake'&&req.method==='POST'&&verifiedCronWake(req.headers,connection.ownerKey);
+   if(!cronWake&&!equal(req.headers.authorization,'Bearer '+connection.ownerKey))return send(401,{error:'Unauthorized'});
    if(action==='jobs'&&req.method==='GET'){
     try{return send(200,{jobs:await connection.publisher.list()});}
     catch{return send(503,{error:'Could not load publication jobs.'});}
