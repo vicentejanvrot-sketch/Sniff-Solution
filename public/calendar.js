@@ -19,7 +19,7 @@ export function calendarStatus(entry){
  if(status==='cancelled')return {name:'Cancelled',icon:'−',style:'cancelled',description:'Publication cancelled'};
  return {name:'Scheduled',icon:'◷',style:'scheduled',description:entry?.activationState==='active'?'Activated for Instagram publishing':'Scheduled locally; activate for live publishing'};
 }
-const publishedTime=entry=>entry.publishedAt?new Date(entry.publishedAt).toISOString().replace('T',' ').replace('.000Z',' UTC'):null;
+const publishedTime=entry=>entry.publishedAt?new Date(entry.publishedAt).toISOString().replace('T',' ').replace(/Z$/,' UTC'):null;
 const verifiedLink=value=>{
  if(typeof value!=='string')return null;
  try{const url=new URL(value);return url.protocol==='https:'&&['www.instagram.com','instagram.com'].includes(url.hostname)&&/^\/(p|reel|tv)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)&&!url.search&&!url.hash?url.href:null;}catch{return null;}
