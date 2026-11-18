@@ -49,6 +49,22 @@ export function createPublishingServer({connection=null}={}){
     try{return send(200,{jobs:await connection.publisher.list()});}
     catch{return send(503,{error:'Could not load publication jobs.'});}
    }
+   if(action==='health'&&req.method==='GET'){
+    try{return send(200,{...await connection.publisher.health(),publishingEnabled:connection.publishingEnabled===true});}
+    catch{return send(503,{error:'Could not load publishing health.'});}
+   }
+   if(action==='history'&&req.method==='GET'){
+    try{return send(200,{events:await connection.publisher.history(url.searchParams.get('id'))});}
+    catch{return send(400,{error:'Publication history unavailable.'});}
+   }
+   if(action==='wake'&&req.method==='POST'){
+    if(!connection.publishingEnabled)return send(409,{error:'Cloud publishing is disabled.'});
+    try{
+     const processed=await connection.publisher.pump();
+     connection.lastWakeAt=new Date().toISOString();
+     return send(200,{ok:true,processed,checkedAt:connection.lastWakeAt});
+    }catch(e){return send(503,{error:'Publishing check failed. Review cloud health and logs.'});}
+   }
    if(!connection.publishingEnabled)return send(409,{error:'Live publishing is disabled. Set PUBLISHING_ENABLED=true on Render only after acceptance tests.'});
    try{
     if(action==='stage'&&req.method==='POST'){
@@ -68,6 +84,7 @@ export function createPublishingServer({connection=null}={}){
     const data=JSON.parse(Buffer.concat(parts).toString('utf8'));
     if(action==='enqueue'&&req.method==='POST')return send(201,await connection.publisher.enqueue(data));
     if(action==='cancel'&&req.method==='POST')return send(200,await connection.publisher.cancel(data.id));
+    if(action==='retry'&&req.method==='POST')return send(200,await connection.publisher.retry(data.id));
     return send(404,{error:'Unknown publication action.'});
    }catch{return send(409,{error:'Publication operation could not be completed. Check the connected account, cloud storage and publication status before retrying.'});}
   }
