@@ -1,13 +1,13 @@
-# Phase 4 · v0.4.2
+# Phase 4 · v0.4.3
 
 ## Install the complete Windows update
 
-Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.2-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
+Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.3-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
 
 1. Quit Sniff Solution from its tray menu. Closing the browser leaves the old server running. Let active work finish.
 2. Extract **all** ZIP contents over the existing app folder and replace application files.
 3. Run **START_SNIFF.cmd** from that folder. It refreshes the desktop and Start menu shortcuts to that exact copy.
-4. Confirm **v0.4.2** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
+4. Confirm **v0.4.3** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
 
 The ZIP contains the launcher, app, Node.js, Python, FFmpeg and FFprobe. Real `.env`, `.data`, API keys and user files are excluded. Overwriting app files preserves desktop records/settings in `%LOCALAPPDATA%\SniffSolution` and existing checkout `.env`/`.data`. Retain the same publishing owner key, encryption key, workspace and cloud service.
 
@@ -18,8 +18,8 @@ The ZIP contains the launcher, app, Node.js, Python, FFmpeg and FFprobe. Real `.
 3. Edit a day and **Save for review**, or **Save & approve day** after checking claims, caption, scenes and timing. **Regenerate this day** makes one new paid text request; earlier versions remain in **Previous versions**. Active requests and publication-linked days reject edits. Malformed/truncated outputs never replace saved text and retain billing reservations for reconciliation. No billed request is automatically retried.
 4. Open the approved day's **Image Studio** or **Video Studio**. Check the carried brief, caption, aspect ratio and Reel duration. Planner video briefs skip the separate text-preparation step. Edit content in the planner and reapprove it; the studio protects those saved fields. Optional overlay text is loaded separately, with brand overlays enabled when present; review the rendering font/options before generation.
 5. Select **Start production** to make a separate paid media request. Approve the finished asset in **Media Library** after checking the actual result. The planner approval does not approve generated media.
-6. Return to the plan and refresh. Select an approved finished output and connected account, then **Create local schedule**. Check the exact caption, planned local time and time zone in Publishing Calendar. No live cloud activation happens here.
-7. If you intend to publish, use the existing explicit **Activate live publishing** flow on that individual post. Confirm status/history afterwards. Never activate test content unintentionally.
+6. Return to the plan and refresh. Select an approved finished output and connected account (sole valid options are selected automatically). Review the saved caption, time and time zone, then choose **Schedule & activate**, or **Schedule & activate ready posts** for the ready days in this plan. This authorizes automatic public Instagram publishing at the saved times; it creates the schedule and activates it in the cloud without another calendar step.
+7. Confirm the planner reports **scheduled for automatic publishing**. Existing local schedules from older versions can be activated here without repeating the dates or creating duplicates. Already activated posts are disabled and excluded from the ready-post action. **Refresh results** checks cloud status for activated posts. Use Publishing Calendar for changes/history if needed; no visit there is required for normal planner scheduling.
 8. Refresh planner progress to follow generation, media review, scheduling and publication. Editing a day creates a new version; existing media remains stored under its previous version. Cancel a local schedule before editing its day. Published/history records remain protected.
 9. Export a plan, restart the app and verify dates, text, reviews and links remain. Existing Phase 1–3 records and keys must still be present.
 
@@ -69,3 +69,14 @@ In Content Planner → New content plan, type part of a campaign goal, select **
 - For a failed/interrupted rendering job with a saved original, choose **Activity → Finish saved output**. It queues one unfinished original at a time as a new **local / FFmpeg** job with zero reservation/provider cost. Existing paid billing records, request IDs and originals remain intact; no new provider request is made. Review and approve the new final output. Planner links are carried forward under their original version. Active duplicates and already finished originals are rejected. If a batch has multiple unfinished originals, repeat after each local render completes.
 
 Model schemas verified against the [Higgsfield production catalog](https://open.higgsfield.ai/explore/video) and each integrated model's API reference on 2026-11-18; account model discovery follows the [OpenAI model-list endpoint](https://developers.openai.com/api/reference/resources/models/methods/list). Actual provider acceptance, output quality and billing remain real-account checks.
+
+
+## Direct scheduling and activation (0.4.3)
+
+The new planner action reuses saved local time, IANA time zone, approved caption and media version. No new service, cloud deployment, API key or generation is required; it uses the existing publishing staging/enqueue API. Only a deliberate Schedule & activate action sends posts to cloud publishing. Merely saving or approving a plan or installing the update never activates it. Existing Calendar-only scheduling and activation still work.
+
+- Test three approved days (two Reels and an image). Verify a single ready-post action activates them all with the saved times/accounts and leaves the user in Content Planner. Multiple media/account choices require an explicit selection; only sole valid choices are automatic. Unsaved changes must be saved and approved before scheduling.
+- Test schedules created by an older version: reuse their exact IDs and publication snapshots. Do not create replacements or reset posting dates. Requests are serialized locally; concurrent/double submissions cannot stage the same post twice.
+- Each post has an individual result. A partial batch keeps successful activations and reports failures; active/uncertain posts are excluded from subsequent ready-post actions. If activation acknowledgement is uncertain, choose **Check activation status**. This reads the existing cloud queue without restaging or enqueuing again. A missing cloud record does not authorize a blind retry.
+- Cloud/network failures preserve the schedule and show an error instead of claiming success. A local media-conversion failure before cloud contact leaves the post local and retryable after fixing the media/renderer. Validate media approval/version, brand/account ownership, future time and plan revision before activation.
+- Confirm no public posting occurs during automated testing. Integration and browser tests mock the publishing service; real-account publication is the owner's acceptance check.

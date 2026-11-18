@@ -136,6 +136,34 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    }
   }finally{working=false;}
  }
+ async function activateSchedule(scheduleId,{idempotent=false}={}){
+  const snapshot=await store.update(s=>{
+   const item=(s.schedules||[]).find(v=>v.id===scheduleId);
+   if(!item)fail('Scheduled publication not found.',404);
+   if(idempotent&&item.activationState==='active')return {alreadyActive:true,schedule:structuredClone(item)};
+   if(item.status!=='scheduled'||item.activationState)fail('This publication is already active, cancelled, or needs reconciliation. Refresh publishing status before another action.',409);
+   if(Date.parse(item.scheduledAt)<Date.now()+120000)fail('Choose a publication at least two minutes in the future.',409);
+   const media=s.media.find(m=>m.id===item.mediaId&&m.brandId===item.brandId);
+   if(!media||media.status!=='approved'||media.version!==item.mediaVersion)fail('Media approval changed. Review it before activating.',409);
+   const draft=item.draftId?s.drafts.find(d=>d.id===item.draftId&&d.brandId===item.brandId&&d.status==='approved'&&d.version===item.draftVersion):null;
+   if(item.draftId&&!draft)fail('Draft approval changed. Review it before activating.',409);
+   item.activationState='staging';item.updatedAt=now();delete item.lastError;audit(s,'schedule.activation_started',item.id);
+   return {schedule:structuredClone(item),media:structuredClone(media)};
+  });
+  if(snapshot.alreadyActive)return snapshot.schedule;
+  let cloudStarted=false;
+  try{
+   const prepared=await prepareInstagramMedia(snapshot.media,await readMedia(snapshot.media),{env});
+   cloudStarted=true;
+   await publishing.stage(snapshot.schedule.id,prepared.mime,prepared.bytes);
+   const job=snapshot.schedule;
+   await publishing.enqueue({id:job.id,brandId:job.brandId,accountId:job.accountId,assetId:job.mediaId,assetVersion:job.mediaVersion,mime:prepared.mime,caption:job.caption,scheduledAt:job.scheduledAt,timezone:job.timezone});
+   return await store.update(s=>{const item=s.schedules.find(v=>v.id===scheduleId);item.activationState='active';item.cloudStatus='scheduled';item.updatedAt=now();audit(s,'schedule.cloud_activated',item.id);return item;});
+  }catch(e){
+   await store.update(s=>{const item=s.schedules.find(v=>v.id===scheduleId);if(item){if(cloudStarted)item.activationState='uncertain';else delete item.activationState;item.lastError=cloudStarted?'Cloud activation was not confirmed. Refresh publishing status before taking another action.':'Local media preparation failed. The saved schedule has not been sent for publishing. Check the saved asset and local renderer.';item.updatedAt=now();audit(s,cloudStarted?'schedule.activation_uncertain':'schedule.preparation_failed',item.id);}}).catch(()=>{});
+   throw Object.assign(new Error(cloudStarted?'Cloud activation could not be verified. Refresh publishing status; do not activate the same post again blindly.':'The media could not be prepared locally. Your schedule is saved but is not active. Check the saved media and renderer, then try Schedule & activate again.'),{status:503});
+  }
+ }
  function publicState(){const s=store.read();return {...s,skills,production:{videoModels,fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!higgsfieldCredential(env),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 4 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
  const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
@@ -214,32 +242,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      });
      return json(res,updated);
     }
-    if(/^\/api\/schedules\/[^/]+\/activate$/.test(p)&&req.method==='POST'){
-     const scheduleId=p.split('/')[3];
-     const snapshot=await store.update(s=>{
-      const item=(s.schedules||[]).find(v=>v.id===scheduleId);
-      if(!item)fail('Scheduled publication not found.',404);
-      if(item.status!=='scheduled'||item.activationState)fail('This publication is already active, cancelled, or needs reconciliation.',409);
-      if(Date.parse(item.scheduledAt)<Date.now()+120000)fail('Choose a publication at least two minutes in the future.',409);
-      const media=s.media.find(m=>m.id===item.mediaId&&m.brandId===item.brandId);
-      if(!media||media.status!=='approved'||media.version!==item.mediaVersion)fail('Media approval changed. Review it before activating.',409);
-      const draft=item.draftId?s.drafts.find(d=>d.id===item.draftId&&d.brandId===item.brandId&&d.status==='approved'&&d.version===item.draftVersion):null;
-      if(item.draftId&&!draft)fail('Draft approval changed. Review it before activating.',409);
-      item.activationState='staging';item.updatedAt=now();audit(s,'schedule.activation_started',item.id);
-      return {schedule:structuredClone(item),media:structuredClone(media)};
-     });
-     try{
-      const prepared=await prepareInstagramMedia(snapshot.media,await readMedia(snapshot.media),{env});
-      await publishing.stage(snapshot.schedule.id,prepared.mime,prepared.bytes);
-      const job=snapshot.schedule;
-      await publishing.enqueue({id:job.id,brandId:job.brandId,accountId:job.accountId,assetId:job.mediaId,assetVersion:job.mediaVersion,mime:prepared.mime,caption:job.caption,scheduledAt:job.scheduledAt,timezone:job.timezone});
-      const active=await store.update(s=>{const item=s.schedules.find(v=>v.id===scheduleId);item.activationState='active';item.cloudStatus='scheduled';item.updatedAt=now();audit(s,'schedule.cloud_activated',item.id);return item;});
-      return json(res,active);
-     }catch(e){
-      await store.update(s=>{const item=s.schedules.find(v=>v.id===scheduleId);if(item){item.activationState='uncertain';item.lastError='Cloud activation was not confirmed. Refresh cloud status before taking another action.';item.updatedAt=now();audit(s,'schedule.activation_uncertain',item.id);}}).catch(()=>{});
-      throw Object.assign(new Error('Cloud activation could not be verified. Refresh cloud status; do not activate the same post again blindly.'),{status:503});
-     }
-    }
+    if(/^\/api\/schedules\/[^/]+\/activate$/.test(p)&&req.method==='POST')return json(res,await activateSchedule(p.split('/')[3]));
     if(p==='/api/schedules'&&req.method==='GET')return json(res,store.read().schedules||[]);
     if(p==='/api/schedules'&&req.method==='POST'){
      const b=await jsonBody(req);
@@ -297,14 +300,26 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     }
     if(/^\/api\/plans\/[^/]+\/days\/[^/]+\/schedule$/.test(p)&&req.method==='POST'){
      const b=await jsonBody(req),accounts=(await publishing.accounts()).accounts;
-     const item=await store.update(s=>{
-      const {plan,entry}=findEntry(s,p.split('/')[3],p.split('/')[5]);ensureEntryEditable(s,entry);
+     const result=await store.update(s=>{
+      const {plan,entry}=findEntry(s,p.split('/')[3],p.split('/')[5]);
       if(entry.status!=='approved'||b.version!==entry.version)fail('Approve the current day before scheduling.',409);
+      const existing=(s.schedules||[]).find(x=>x.plannerEntryId===entry.id&&x.status!=='cancelled');
+      if(existing){
+       if(b.activate!==true)fail('This day already has a publication record.',409);
+       if(existing.plannerPlanId!==plan.id||existing.plannerEntryVersion!==entry.version)fail('This publication belongs to an earlier plan version. Review its saved publication details.',409);
+       if(b.mediaId&&b.mediaId!==existing.mediaId||b.accountId&&b.accountId!==existing.accountId)fail('A schedule already exists with different media or account. Use the existing publication rather than creating a duplicate.',409);
+       if(!accounts.some(a=>a.id===existing.accountId&&a.brand_id===plan.brandId&&a.status==='connected'))fail('Reconnect this brand’s Instagram account before activation.',409);
+       return {item:existing,created:false};
+      }
+      ensureEntryEditable(s,entry);
       const m=s.media.find(m=>m.id===b.mediaId),j=s.jobs.find(j=>j.id===m?.jobId);
       if(!j||j.plannerEntryId!==entry.id||j.plannerEntryVersion!==entry.version||m.role!=='rendered')fail('Choose finished media generated from this approved day.',409);
       const record=validateSchedule(s,{brandId:plan.brandId,accountId:b.accountId,mediaId:m.id,caption:entry.caption,timezone:plan.timezone,localTime:entry.localTime},{accounts});
-      Object.assign(record,{plannerPlanId:plan.id,plannerEntryId:entry.id,plannerEntryVersion:entry.version});(s.schedules??=[]).unshift(record);audit(s,'schedule.created',record.id);return record;
-     });return json(res,item,201);
+      if(b.activate===true&&Date.parse(record.scheduledAt)<Date.now()+120000)fail('Choose a publication at least two minutes in the future.',409);
+      Object.assign(record,{plannerPlanId:plan.id,plannerEntryId:entry.id,plannerEntryVersion:entry.version});(s.schedules??=[]).unshift(record);audit(s,'schedule.created',record.id);return {item:record,created:true};
+     });
+     const item=b.activate===true?await activateSchedule(result.item.id,{idempotent:true}):result.item;
+     return json(res,item,result.created?201:200);
     }
     if(p==='/api/media-models'&&req.method==='GET'){
      if(!imageCatalog||imageCatalog.expires<Date.now())imageCatalog={ids:await accountImageModels({env,fetcher}),expires:Date.now()+300000};

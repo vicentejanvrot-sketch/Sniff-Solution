@@ -3,15 +3,13 @@ SNIFF SOLUTION - COMPLETE APP FOLDER
 This ZIP is the complete runnable Windows app: SniffSolution.exe,
 START_SNIFF.cmd, all app files, and bundled Node.js, Python, FFmpeg and FFprobe.
 VERSION.txt and build-info.json show its version and source commit.
-This update is version 0.4.2. Dictate controls now appear on editable long-text
-fields throughout the app, including campaign goals, daily briefs/captions,
-brand descriptions, content skills, draft editing and media/calendar captions.
-Speech appends to typed text. Locked and read-only fields remain protected.
-Generation models can be selected before production in both studios.
-Calibri small-text rendering is fixed. On a failed rendering job, use Finish
-saved output to render its preserved original locally without new AI charges.
-Existing accounts, schedules, media, keys and records are preserved. No plan is
-automatically generated, approved or activated for publishing by this update.
+This update is version 0.4.3. Content Planner now offers Schedule & activate
+and Schedule & activate ready posts, using the saved dates, times, captions,
+approved media and Instagram accounts without another calendar step.
+Existing local schedules are reused rather than duplicated. The update itself
+never activates any post; choose the new action when ready to authorize it.
+Existing plans, schedules, approvals, media, configuration and keys are kept.
+All previous dictation, model selection and rendering recovery changes remain.
 See PHASE4_TEST_GUIDE.md for setup, verification and current limits.
 (GitHub "Code > Download ZIP" / "Source code" archives are NOT this app.)
 

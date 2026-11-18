@@ -6,11 +6,12 @@ const path=require('node:path');
 (async()=>{
  const {createApp}=await import('../server.mjs');
  const dir=await mkdtemp(path.join(tmpdir(),'sniff-phase4-ui-'));
- const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg==','base64');
+ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAABAAAAAQBPJcTWAAAAEElEQVR4nGP8ywACLGCSAQANEQED1LYyQAAAAABJRU5ErkJggg==','base64');
  const fields={title:'Travel light',purpose:'A packing idea for travellers. Creative assumption: a weekend trip.',prompt:'0–5 seconds: a suitcase on a sunlit table. 5–10 seconds: slow camera push toward a neatly packed bag.',onScreenText:'',caption:'Pack a little lighter. Save this for your next trip. #travel'};
  let textCalls=0,imageCalls=0,syncCalls=0,videoCalls=0,failRenderOnce=false;
  const account={id:'00000000-0000-4000-8000-000000000001',brand_id:'brand',instagram_user_id:'123456789',username:'travelqa',status:'connected'};
- const app=await createApp({dir,env:{OPENAI_API_KEY:'mock',HF_API_KEY:'mock-video',PUBLISHING_OWNER_KEY:'x'.repeat(44)},fontCatalogProvider:async()=>[],assetDownloader:async()=>Buffer.from('mock MP4'),pollDelay:1,mediaRenderer:async r=>{if(failRenderOnce){failRenderOnce=false;throw Error('Simulated font rendering failure');}return r;},fetcher:async(url,opts)=>{
+ const app=await createApp({dir,env:{OPENAI_API_KEY:'mock',HF_API_KEY:'mock-video',PUBLISHING_OWNER_KEY:'x'.repeat(44),FFMPEG:process.env.FFMPEG||'ffmpeg'},fontCatalogProvider:async()=>[],assetDownloader:async()=>Buffer.from('mock MP4'),pollDelay:1,mediaRenderer:async r=>{if(failRenderOnce){failRenderOnce=false;throw Error('Simulated font rendering failure');}return r;},fetcher:async(url,opts)=>{
+  if(String(url).endsWith('/api/publishing/stage')||String(url).endsWith('/api/publishing/enqueue'))return Response.json({ok:true});
   if(String(url).endsWith('/api/social/accounts'))return Response.json({accounts:[account]});
   if(String(url).endsWith('/v1/models'))return Response.json({data:[{id:'gpt-image-alternative'}]});
   if(String(url).includes('api.higgsfield.ai')){if(opts.method==='POST'){videoCalls++;assert.ok(String(url).endsWith('kling-video/v3.0/pro/text-to-video'));assert.equal(JSON.parse(opts.body).sound,'on');return Response.json({request_id:'model-selection-video'});}return Response.json({status:'completed',video:{url:'https://media.example.com/video.mp4'}});}
@@ -24,7 +25,7 @@ const path=require('node:path');
  await new Promise(r=>app.server.listen(0,'127.0.0.1',r));
  const browser=await chromium.launch({headless:true,executablePath:process.env.SNIFF_TEST_BROWSER||undefined});
  try{
-  const page=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
+  const page=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[];page.on('pageerror',e=>{errors.push(e.message);console.log('PAGE ERROR:',e.message);});page.on('dialog',d=>d.accept());
   const base='http://127.0.0.1:'+app.server.address().port;
   await page.goto(base);await page.locator('nav').getByRole('button',{name:'Content Planner',exact:true}).click();
   await page.getByRole('button',{name:'+ New content plan'}).click();
@@ -52,8 +53,8 @@ const path=require('node:path');
   const approval=await fetch(base+'/api/media/'+media.id,{method:'PUT',headers:{'X-Sniff-Client':'1','Content-Type':'application/json'},body:JSON.stringify({version:media.version,status:'approved',caption:fields.caption})});assert.equal(approval.status,200);
   await page.reload();await page.locator('nav').getByRole('button',{name:'Content Planner',exact:true}).click();
   const first=page.locator('[data-entry-form]').first();await first.locator('[name=accountId] option[value="'+account.id+'"]').waitFor({state:'attached'});
-  await first.locator('[name=accountId]').selectOption(account.id);await first.locator('[name=mediaId]').selectOption(media.id);await first.getByRole('button',{name:'Create local schedule'}).click();await page.getByRole('heading',{name:'Publishing Calendar',exact:true}).waitFor();
-  const schedule=app.store.read().schedules[0];assert.equal(schedule.caption,fields.caption);assert.equal(schedule.activationState,undefined);
+  await first.locator('[name=accountId]').selectOption(account.id);await first.locator('[name=mediaId]').selectOption(media.id);await first.getByRole('button',{name:'Schedule & activate',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#plan-publish-status').textContent.includes('Activated for automatic publishing')||document.querySelector('#toast').className==='error');assert.ok((await page.locator('#plan-publish-status').textContent()).includes('Activated for automatic publishing'),await page.locator('#toast').textContent());assert.equal(await page.getByRole('heading',{name:'Content Planner',exact:true}).count(),1);
+  const schedule=app.store.read().schedules[0];assert.equal(schedule.caption,fields.caption);assert.equal(schedule.activationState,'active');
   await page.locator('nav').getByRole('button',{name:'Content Planner',exact:true}).click();
   await page.getByRole('button',{name:'Save & approve day',exact:true}).nth(1).click();await page.waitForFunction(()=>document.querySelectorAll('[data-produce]')[1].disabled===false);
   await page.getByRole('button',{name:'Open Video Studio',exact:true}).click();
