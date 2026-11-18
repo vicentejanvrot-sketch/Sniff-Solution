@@ -1,4 +1,5 @@
 import {desktopPublishing} from './lib/desktop-publishing.mjs';
+import {prepareInstagramMedia} from './lib/publish-media.mjs';
 import {validateSchedule,cancelSchedule,ensureNotScheduled} from './lib/calendar.mjs';
 import {videoBriefPrompt} from './lib/video-brief.mjs';
 import http from 'node:http';
@@ -149,6 +150,49 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      const b=await jsonBody(req);if(!store.read().brands.some(x=>x.id===b.brandId))fail('Brand not found.',404);
      return json(res,await publishing.disconnect(b.accountId,b.brandId));
     }
+    if(p==='/api/schedules/sync'&&req.method==='POST'){
+     const response=await publishing.jobs();
+     const cloud=new Map((response.jobs||[]).map(j=>[j.id,j]));
+     const updated=await store.update(s=>{
+      for(const item of s.schedules||[]){
+       const remote=cloud.get(item.id);
+       if(!remote)continue;
+       item.cloudStatus=remote.status;item.activationState='active';
+       item.instagramMediaId=remote.instagram_media_id||null;
+       item.publishedAt=remote.published_at||null;
+       item.lastError=remote.last_error||null;
+       if(['published','failed','cancelled','needs_reconciliation'].includes(remote.status))item.status=remote.status;
+      }
+      return s.schedules||[];
+     });
+     return json(res,updated);
+    }
+    if(/^\/api\/schedules\/[^/]+\/activate$/.test(p)&&req.method==='POST'){
+     const scheduleId=p.split('/')[3];
+     const snapshot=await store.update(s=>{
+      const item=(s.schedules||[]).find(v=>v.id===scheduleId);
+      if(!item)fail('Scheduled publication not found.',404);
+      if(item.status!=='scheduled'||item.activationState)fail('This publication is already active, cancelled, or needs reconciliation.',409);
+      if(Date.parse(item.scheduledAt)<Date.now()+120000)fail('Choose a publication at least two minutes in the future.',409);
+      const media=s.media.find(m=>m.id===item.mediaId&&m.brandId===item.brandId);
+      if(!media||media.status!=='approved'||media.version!==item.mediaVersion)fail('Media approval changed. Review it before activating.',409);
+      const draft=item.draftId?s.drafts.find(d=>d.id===item.draftId&&d.brandId===item.brandId&&d.status==='approved'&&d.version===item.draftVersion):null;
+      if(item.draftId&&!draft)fail('Draft approval changed. Review it before activating.',409);
+      item.activationState='staging';item.updatedAt=now();audit(s,'schedule.activation_started',item.id);
+      return {schedule:structuredClone(item),media:structuredClone(media)};
+     });
+     try{
+      const prepared=await prepareInstagramMedia(snapshot.media,await readMedia(snapshot.media),{env});
+      await publishing.stage(snapshot.schedule.id,prepared.mime,prepared.bytes);
+      const job=snapshot.schedule;
+      await publishing.enqueue({id:job.id,brandId:job.brandId,accountId:job.accountId,assetId:job.mediaId,assetVersion:job.mediaVersion,mime:prepared.mime,caption:job.caption,scheduledAt:job.scheduledAt,timezone:job.timezone});
+      const active=await store.update(s=>{const item=s.schedules.find(v=>v.id===scheduleId);item.activationState='active';item.cloudStatus='scheduled';item.updatedAt=now();audit(s,'schedule.cloud_activated',item.id);return item;});
+      return json(res,active);
+     }catch(e){
+      await store.update(s=>{const item=s.schedules.find(v=>v.id===scheduleId);if(item){item.activationState='uncertain';item.lastError='Cloud activation was not confirmed. Refresh cloud status before taking another action.';item.updatedAt=now();audit(s,'schedule.activation_uncertain',item.id);}}).catch(()=>{});
+      throw Object.assign(new Error('Cloud activation could not be verified. Refresh cloud status; do not activate the same post again blindly.'),{status:503});
+     }
+    }
     if(p==='/api/schedules'&&req.method==='GET')return json(res,store.read().schedules||[]);
     if(p==='/api/schedules'&&req.method==='POST'){
      const b=await jsonBody(req);
@@ -165,6 +209,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      const result=await store.update(s=>{
       const current=(s.schedules||[]).find(x=>x.id===scheduleId);
       if(!current)fail('Schedule not found.',404);
+      if(current.activationState)fail('Cloud-activated posts cannot be edited. Cancel in the cloud first and create a replacement.',409);
       if(b.version!==current.version)fail('Schedule changed. Reload before editing.',409);
       if(b.brandId!==current.brandId)fail('Cannot transfer a publication to another brand.',409);
       const updated=validateSchedule(s,b,{accounts,existing:current});
@@ -174,7 +219,11 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     }
     if(/^\/api\/schedules\/[^/]+\/cancel$/.test(p)&&req.method==='POST'){
      const b=await jsonBody(req),scheduleId=p.split('/')[3];
-     const result=await store.update(s=>{const entry=cancelSchedule(s,scheduleId,b.version);audit(s,'schedule.cancelled',entry.id);return entry;});
+     const snapshot=(store.read().schedules||[]).find(x=>x.id===scheduleId);
+     if(!snapshot)fail('Scheduled publication not found.',404);
+     if(snapshot.version!==b.version)fail('Schedule changed. Reload first.',409);
+     if(snapshot.activationState){await publishing.cancel(scheduleId);}
+     const result=await store.update(s=>{const entry=cancelSchedule(s,scheduleId,b.version);if(snapshot.activationState){entry.cloudStatus='cancelled';entry.activationState='active';}audit(s,'schedule.cancelled',entry.id);return entry;});
      return json(res,result);
     }
     if(p==='/api/fonts/refresh'&&req.method==='POST'){fontCatalog=await fontCatalogProvider({refresh:true});return json(res,publicFonts(fontCatalog));}
