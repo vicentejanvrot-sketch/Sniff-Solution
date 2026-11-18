@@ -9,7 +9,7 @@ if(!( [IO.Path]::GetFullPath($stage).StartsWith([IO.Path]::GetFullPath($root)+[I
 if(Test-Path $stage){Remove-Item -LiteralPath $stage -Recurse -Force}
 New-Item $stage,$output,$downloads,(Join-Path $stage 'runtime\python'),(Join-Path $stage 'desktop') -ItemType Directory -Force | Out-Null
 # Complete source allowlist: excludes real .env, user records, build directories and Git metadata.
-foreach($name in @('AGENTS.md','PHASE1_TEST_GUIDE.md','PHASE2_TEST_GUIDE.md','PHASE3_SETUP.md','PHASE3_AUTH_SETUP.md','PHASE3_RENDER_DEPLOY.md','PHASE3_CALENDAR_TEST_GUIDE.md','server.mjs','package.json','.env.example','.gitignore','README.md','START_SNIFF.cmd','UPDATE_README.txt')){Copy-Item (Join-Path $root $name) $stage}
+foreach($name in @('AGENTS.md','PHASE1_TEST_GUIDE.md','PHASE2_TEST_GUIDE.md','PHASE3_SETUP.md','PHASE3_AUTH_SETUP.md','PHASE3_RENDER_DEPLOY.md','PHASE3_CALENDAR_TEST_GUIDE.md','PHASE3_LIVE_PUBLISHING.md','server.mjs','package.json','.env.example','.gitignore','README.md','START_SNIFF.cmd','UPDATE_README.txt')){Copy-Item (Join-Path $root $name) $stage}
 foreach($name in @('lib','public','tools','desktop','db','test','cloud','.github')){$destination=Join-Path $stage $name;New-Item $destination -ItemType Directory -Force | Out-Null;Get-ChildItem (Join-Path $root $name) -Force | Copy-Item -Destination $destination -Recurse -Force}
 Copy-Item (Join-Path $PSScriptRoot 'INSTALL.txt') $stage
 Get-ChildItem $stage -Directory -Recurse -Filter '__pycache__' | Remove-Item -Recurse -Force
