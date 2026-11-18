@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHmac} from 'node:crypto';
 import {once} from 'node:events';
 import {encryptToken,decryptToken} from '../lib/publishing-crypto.mjs';
 import {createPublishingServer} from '../cloud/publishing-server.mjs';
@@ -101,4 +101,27 @@ test('cloud worker boot uses the initialized connection and schedules 30-second 
  assert.equal(calls,2);
  assert.equal(startPublishingWorker({...connection,publishingEnabled:false},{schedule:()=>{throw Error('disabled worker must not schedule');}}),null);
  assert.equal(startPublishingWorker(null,{schedule:()=>{throw Error('missing connection must not schedule');}}),null);
+});
+
+test('cron wake requires fresh HMAC, rejects replayed and unsigned calls',async t=>{
+ const {verifiedCronWake}=await import('../cloud/publishing-server.mjs');
+ const key=randomBytes(32).toString('base64');
+ const now=Date.now(),ts=String(Math.floor(now/1000));
+ const signature=createHmac('sha256',key).update(ts+'.{}').digest('hex');
+ const headers={'x-sniff-timestamp':ts,'x-sniff-signature':signature};
+ assert.equal(verifiedCronWake(headers,key,now),true);
+ assert.equal(verifiedCronWake(headers,key,now+180000),false);
+ assert.equal(verifiedCronWake({...headers,'x-sniff-signature':'0'.repeat(64)},key,now),false);
+ assert.equal(verifiedCronWake({},key,now),false);
+ let calls=0;
+ const server=createPublishingServer({connection:{ownerKey:key,publishingEnabled:true,publisher:{pump:async()=>{calls++;return 2;},health:async()=>({summary:{published:1},warnings:[]}),history:async()=>[]}}});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const base='http://127.0.0.1:'+server.address().port;
+ assert.equal((await fetch(base+'/api/publishing/wake',{method:'POST'})).status,401);
+ assert.equal((await fetch(base+'/api/publishing/wake',{method:'POST',headers})).status,200);
+ assert.equal(calls,1);
+ assert.equal((await fetch(base+'/api/publishing/health')).status,401);
+ const health=await fetch(base+'/api/publishing/health',{headers:{Authorization:'Bearer '+key}});
+ assert.equal(health.status,200);assert.equal((await health.json()).summary.published,1);
 });
