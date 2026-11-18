@@ -34,7 +34,20 @@ if($LASTEXITCODE -ne 0){throw 'Bundled Python failed.'}
 $ffmpegVersion='9.0.2'
 $ffmpegHash='60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba'
 $ffmpegZip=Join-Path $downloads "ffmpeg-$ffmpegVersion.zip"
-Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-$ffmpegVersion-essentials_build.zip" -OutFile $ffmpegZip
+$ffmpegUrl="https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-$ffmpegVersion-essentials_build.zip"
+$downloaded=$false
+for($attempt=1;$attempt -le 6;$attempt++){
+  try{
+    Invoke-WebRequest $ffmpegUrl -OutFile $ffmpegZip -ErrorAction Stop
+    $downloaded=$true
+    break
+  }catch{
+    if($attempt -eq 6){throw "Verified FFmpeg download failed after six attempts: $($_.Exception.Message)"}
+    Write-Warning "FFmpeg host unavailable (attempt $attempt/6); retrying in $($attempt*12) seconds."
+    Start-Sleep -Seconds ($attempt*12)
+  }
+}
+if(-not $downloaded){throw "Unable to download FFmpeg."}
 if((Get-FileHash $ffmpegZip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ffmpegHash){throw 'FFmpeg checksum mismatch.'}
 $ffmpegExtract=Join-Path $downloads "ffmpeg-$ffmpegVersion"
 Expand-Archive -LiteralPath $ffmpegZip -DestinationPath $ffmpegExtract -Force
