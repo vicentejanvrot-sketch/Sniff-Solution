@@ -152,3 +152,28 @@ test('research parsing tolerates text or citation markers around the JSON object
  const r=parseResearch('Here are the suggestions [1]:\n{"palette":["#112233"],"font":"Inter","voice":"Warm","audience":"Travellers","goals":"Grow bookings","allowedClaims":[],"prohibitedClaims":[]}\n[1]',evidence);
  assert.equal(r.suggestions.voice,'Warm');assert.equal(r.suggestions.palette,'#112233');
 });
+
+
+test('website research keeps up to 24 distinct colours instead of only model-selected colours',()=>{
+ const css=Array.from({length:18},(_,i)=>'--brand-accent-'+i+': #'+(0x102030+i*0x050709).toString(16).padStart(6,'0')+';').join('\n');
+ const evidence={
+  styling:extractStyles('<meta name="theme-color" content="#123ABC"><svg><path fill="#AABBCC"/></svg><style>:root{'+css+'}</style>',[], 'https://brand.example/'),
+  warnings:[],pages:[],sources:[],capturedAt:'2026-11-18T00:00:00Z',finalUrl:'https://brand.example/'
+ };
+ assert.ok(evidence.styling.colors.length>=18);
+ assert.ok(evidence.styling.colors.some(x=>x.value==='#AABBCC'));
+ const raw={palette:[evidence.styling.colors[1].value],font:'',voice:'Warm',audience:'Local customers',goals:'Increase awareness'};
+ const parsed=parseResearch(JSON.stringify(raw),evidence);
+ const result=parsed.suggestions.palette.split(', ');
+ assert.equal(result.length,evidence.styling.colors.length);
+ assert.equal(result[0],raw.palette[0]);
+ assert.equal(new Set(result).size,result.length);
+ assert.ok(result.length>6);
+});
+test('brand saving accepts 24 owner-selected colours without truncating',async t=>{
+ const {request}=await fixture(t);
+ const colors=Array.from({length:24},(_,i)=>'#'+(0x123000+i*0x101).toString(16).padStart(6,'0')).join(', ');
+ const response=await request('/api/brands','POST',{name:'Colourful Brand',website:'example.com',palette:colors,font:'Arial'});
+ assert.equal(response.status,200);
+ assert.equal(response.body.palette,colors);
+});
