@@ -82,7 +82,7 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
   const canEdit=!record||record.status==='scheduled';
   const brands=state.brands.filter(b=>!activeBrand||b.id===activeBrand);
   const initialBrand=record?.brandId||activeBrand||brands[0]?.id||'';
-  const nextHour=new Date(Date.now()+3600000);const t=record?.localTime||(dateKey(cursor===null?nextHour:cursor)+'T'+(dateKey(cursor)===dateKey(new Date())?pad(nextHour.getHours())+':'+pad(nextHour.getMinutes()):'12:00'));
+  const nextHour=new Date(Date.now()+3600000);const chosenDate=dateKey(cursor)===dateKey(new Date())?nextHour:cursor;const t=record?.localTime||(dateKey(chosenDate)+'T'+(dateKey(cursor)===dateKey(new Date())?pad(nextHour.getHours())+':'+pad(nextHour.getMinutes()):'12:00'));
   q('#cal-form-area').innerHTML='<section class="card cal-editor"><div class="section-title"><h2>'+ (record?'Publication details':'Schedule a publication')+'</h2><button id="cal-close">Close</button></div><form id="cal-form" class="stack"><div class="form-grid"><label>Brand<select name="brandId" required '+(record?'disabled':'')+'>'+optionList(brands,initialBrand,b=>b.name)+'</select></label><label>Instagram account<select name="accountId" required></select></label><label>Approved image or video<select name="mediaId" required></select></label><label>Approved draft (optional)<select name="draftId"></select></label><label>Local date and time<input type="datetime-local" name="localTime" value="'+esc(t)+'" required></label><label>Time zone<input name="timezone" value="'+esc(record?.timezone||timeZone())+'" required maxlength="100" placeholder="America/Edmonton"></label></div><label>Caption and hashtags<textarea name="caption" maxlength="2200" required>'+esc(record?.caption||'')+'</textarea></label><div id="cal-preview" class="cal-preview"></div><p class="hint">Calendar scheduling only. This version does not send posts to Instagram. Times that are ambiguous due to daylight saving changes are rejected.</p><div class="actions">'+(canEdit?'<button class="primary" type="submit">'+(record?'Save changes':'Schedule post')+'</button>':'')+(record?.status==='scheduled'?'<button class="danger" type="button" id="cal-cancel">Cancel publication</button>':'')+'</div></form></section>';
   const form=q('#cal-form');form.elements.brandId.value=initialBrand;
   form.elements.brandId.onchange=()=>{editing=null;updateForm();};
@@ -91,14 +91,14 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
   if(!canEdit){form.querySelectorAll('input,select,textarea').forEach(x=>x.disabled=true);return;}
   if(record?.status==='scheduled')q('#cal-cancel').onclick=async()=>{
    if(!confirm('Cancel this scheduled publication? No content will be sent.'))return;
-   try{await send('/api/schedules/'+record.id+'/cancel','POST',{version:record.version});await refresh();items=state.schedules||[];closeForm();draw();toast('Publication cancelled.');}
+   try{await send('/api/schedules/'+record.id+'/cancel','POST',{version:record.version});await refresh();items=await api('/api/schedules');closeForm();draw();toast('Publication cancelled.');}
    catch(e){toast(e.message,true);}
   };
   form.onsubmit=async e=>{
    e.preventDefault();const button=e.submitter;button.disabled=true;
    const data=Object.fromEntries(new FormData(form));if(record)data.brandId=record.brandId;
    if(record)data.version=record.version;
-   try{await send(record?'/api/schedules/'+record.id:'/api/schedules',record?'PUT':'POST',data);await refresh();items=state.schedules||[];closeForm();draw();toast(record?'Schedule updated.':'Publication scheduled locally.');}
+   try{await send(record?'/api/schedules/'+record.id:'/api/schedules',record?'PUT':'POST',data);await refresh();items=await api('/api/schedules');closeForm();draw();toast(record?'Schedule updated.':'Publication scheduled locally.');}
    catch(err){toast(err.message,true);button.disabled=false;}
   };
  }
