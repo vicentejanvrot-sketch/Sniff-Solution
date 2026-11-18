@@ -22,3 +22,21 @@ test('cloud server exposes health only; callback disabled and desktop inaccessib
  assert.equal((await fetch(base+'/auth/meta/callback?code=fake')).status,503);
  assert.equal((await fetch(base+'/api/settings')).status,404);
 });
+
+import {metaLoginUrl,LoginStates} from '../lib/meta-login.mjs';
+test('Unified Login follows Meta supplied parameters',()=>{
+ const url=new URL(metaLoginUrl({appId:'1436334624843806',configurationId:'1828125495054410',redirectUri:'https://sniff-publishing.onrender.com/auth/meta/callback',state:'test-state'}));
+ assert.equal(url.origin,'https://www.facebook.com');assert.equal(url.pathname,'/dialog/oauth');
+ assert.equal(url.searchParams.get('config_id'),'1828125495054410');
+ assert.equal(url.searchParams.get('response_type'),'code');
+ assert.equal(url.searchParams.get('override_default_response_type'),'true');
+ assert.equal(url.searchParams.get('state'),'test-state');
+});
+test('authorization state is brand-bound, expiring and single-use',()=>{
+ let now=1000;const states=new LoginStates({clock:()=>now,ttlMs:100});
+ const context={workspaceId:'developer',brandId:'test'};
+ const state=states.issue(context);
+ assert.deepEqual(states.consume(state),context);assert.equal(states.consume(state),null);
+ const expired=states.issue(context);now+=101;assert.equal(states.consume(expired),null);
+ assert.equal(states.consume('invalid'),null);
+});
