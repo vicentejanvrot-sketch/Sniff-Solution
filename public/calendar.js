@@ -19,6 +19,11 @@ export function calendarStatus(entry){
  if(status==='cancelled')return {name:'Cancelled',icon:'−',style:'cancelled',description:'Publication cancelled'};
  return {name:'Scheduled',icon:'◷',style:'scheduled',description:entry?.activationState==='active'?'Activated for Instagram publishing':'Scheduled locally; activate for live publishing'};
 }
+const publishedTime=entry=>entry.publishedAt?new Date(entry.publishedAt).toISOString().replace('T',' ').replace('.000Z',' UTC'):null;
+const verifiedLink=value=>{
+ if(typeof value!=='string')return null;
+ try{const url=new URL(value);return url.protocol==='https:'&&['www.instagram.com','instagram.com'].includes(url.hostname)&&/^\\/(p|reel|tv)\\/[A-Za-z0-9_-]+\\/?$/.test(url.pathname)&&!url.search&&!url.hash?url.href:null;}catch{return null;}
+};
 const statusBadge=entry=>{const state=calendarStatus(entry);return '<span class="cal-status cal-status--'+state.style+'" title="'+state.description+'" aria-label="'+state.description+'"><span class="cal-status-icon" aria-hidden="true">'+state.icon+'</span>'+state.name+'</span>';};
 export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh,toast}){
  let mode='month',cursor=clampDay(new Date()),items=state.schedules||[],accounts=[],editing=null;
@@ -59,6 +64,9 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
    const b=state.brands.find(v=>v.id===x.brandId),m=state.media.find(v=>v.id===x.mediaId);
    return '<tr><td>'+esc(x.localTime.replace('T',' '))+'<small>'+esc(x.timezone)+'</small></td><td>'+esc(b?.name||'Deleted brand')+'<small>@'+esc(x.username)+'</small></td><td>'+esc(m?.name||'Missing media')+'</td><td>'+statusBadge(x)+'</td><td><button data-id="'+esc(x.id)+'">'+(x.status==='scheduled'&&!x.activationState?'Edit':'View')+'</button></td></tr>';
   }).join('')+'</tbody></table></div>':'<p class="hint">No scheduled posts. Approve media in Media Library, then select Schedule post.</p>';
+  const completed=[...current].filter(x=>['published','failed','cancelled','needs_reconciliation'].includes(x.cloudStatus||x.status)).sort((a,b)=>String(b.publishedAt||b.updatedAt||'').localeCompare(String(a.publishedAt||a.updatedAt||'')));
+  q('#cal-history-count').textContent=completed.length+' records';
+  q('#cal-history').innerHTML=completed.length?'<div class="table-wrap"><table><thead><tr><th>Status</th><th>Account</th><th>Scheduled for</th><th>Published at (UTC)</th><th>Instagram media ID</th><th>Post link</th><th>Details</th></tr></thead><tbody>'+completed.map(x=>'<tr><td>'+statusBadge(x)+'</td><td>@'+esc(x.username||'Instagram')+'</td><td>'+esc(x.localTime.replace('T',' '))+'<small>'+esc(x.timezone)+'</small></td><td>'+esc(publishedTime(x)||'—')+'</td><td>'+esc(x.instagramMediaId||'—')+'</td><td>'+(verifiedLink(x.permalink)?'<a href="'+esc(verifiedLink(x.permalink))+'" target="_blank" rel="noopener noreferrer">View Instagram post</a>':'—')+'</td><td><button data-id="'+esc(x.id)+'">View</button></td></tr>').join('')+'</tbody></table></div>':'<p class="hint">No completed publications yet. When a live post is confirmed, its result will appear here after Refresh cloud publishing status.</p>';
   el.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>openForm(items.find(x=>x.id===b.dataset.id)));
   el.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{cursor=new Date(b.dataset.date+'T12:00:00');mode='day';q('#cal-view').value=mode;draw();});
  }
@@ -97,6 +105,16 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
   const initialBrand=record?.brandId||activeBrand||brands[0]?.id||'';
   const selectedZone=record?.timezone||timeZone();const nextHour=defaultLocalClock(selectedZone);const t=record?.localTime||(dateKey(cursor)===dateKey(new Date())?new Date(Date.parse(nextHour+'Z')+3600000).toISOString().slice(0,16):dateKey(cursor)+'T12:00');
   q('#cal-form-area').innerHTML='<section class="card cal-editor"><div class="section-title"><h2>'+ (record?'Publication details':'Schedule a publication')+'</h2><button id="cal-close">Close</button></div><form id="cal-form" class="stack"><div class="form-grid"><label>Brand<select name="brandId" required '+(record?'disabled':'')+'>'+optionList(brands,initialBrand,b=>b.name)+'</select></label><label>Instagram account<select name="accountId" required></select></label><label>Approved image or video<select name="mediaId" required></select></label><label>Approved draft (optional)<select name="draftId"></select></label><label>Local date and time<input type="datetime-local" name="localTime" value="'+esc(t)+'" required></label><label>Time zone<select name="timezone" required>'+zoneOptions(record?.timezone||timeZone())+'</select><small id="cal-zone-clock" class="hint"></small></label></div><label>Caption and hashtags<textarea name="caption" maxlength="2200" required>'+esc(record?.caption||'')+'</textarea></label><div id="cal-preview" class="cal-preview"></div><p class="hint">Live activation converts PNG/JPEG to a 4:5 JPEG with margins when necessary. Once publishing begins, cancellation may no longer be possible. Only activate content you intend to make public.</p><div class="actions">'+(record?.status==='scheduled'&&!record.activationState?'<button class="primary" type="button" id="cal-activate">Activate live publishing</button>':'')+(canEdit?'<button class="primary" type="submit">'+(record?'Save changes':'Schedule post')+'</button>':'')+(record?.status==='scheduled'?'<button class="danger" type="button" id="cal-cancel">Cancel publication</button>':'')+'</div></form></section>';
+  if(record){
+   const details=document.createElement('div');details.className='card';details.id='cal-publication-proof';
+   details.innerHTML='<h3>Publishing result</h3><p>'+statusBadge(record)+'</p>'
+   +'<p><strong>Scheduled:</strong> '+esc(record.localTime.replace('T',' '))+' ('+esc(record.timezone)+')</p>'
+   +'<p><strong>Published:</strong> '+esc(publishedTime(record)||'Not yet confirmed')+'</p>'
+   +'<p><strong>Instagram media ID:</strong> '+esc(record.instagramMediaId||'Not assigned')+'</p>'
+   +(verifiedLink(record.permalink)?'<p><a href="'+esc(verifiedLink(record.permalink))+'" target="_blank" rel="noopener noreferrer">View the published post on Instagram</a></p>':'')
+   +(record.lastError?'<p class="hint"><strong>Review note:</strong> '+esc(record.lastError)+'</p>':'');
+   q('#cal-form-area').querySelector('#cal-form').prepend(details);
+  }
   const form=q('#cal-form');form.elements.brandId.value=initialBrand;
   const updateZoneClock=()=>{const output=q('#cal-zone-clock');if(output)output.textContent='Current local time: '+currentZoneClock(form.elements.timezone.value);};
   form.elements.timezone.onchange=updateZoneClock;updateZoneClock();
