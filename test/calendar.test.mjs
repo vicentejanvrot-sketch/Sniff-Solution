@@ -115,3 +115,12 @@ test('publishing history containers exist before first render and cloud refresh'
  assert.match(source,/q\('#cal-history-count'\)\.textContent/);
  assert.match(source,/q\('#cal-history'\)\.innerHTML/);
 });
+
+
+test('new publishing time starts at current selected-zone clock without automatic +1 hour',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const source=await readFile(new URL('../public/calendar.js',import.meta.url),'utf8');
+ assert.match(source,/const t=record\?\.localTime\|\|\(dateKey\(cursor\)===dateKey\(new Date\(\)\)\?nextHour:/);
+ assert.doesNotMatch(source,/Date\.parse\(nextHour\+'Z'\)\+3600000/);
+ assert.match(source,/Date\.now\(\)-21600000/);
+});
