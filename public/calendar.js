@@ -10,7 +10,16 @@ const zoneOptions=selected=>zoneChoices().map(z=>'<option value="'+z+'" '+(selec
 const dateAt=(base,days)=>new Date(base.getFullYear(),base.getMonth(),base.getDate()+days);
 const daysOfMonth=d=>new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
 const startWeek=d=>dateAt(d,-((d.getDay()+6)%7));
-const statusLabel=s=>s.replaceAll('-',' ');
+export function calendarStatus(entry){
+ const status=entry?.cloudStatus||entry?.status||'scheduled';
+ if(status==='published')return {name:'Published',icon:'✓',style:'published',description:'Successfully published to Instagram'};
+ if(status==='failed')return {name:'Failed',icon:'✕',style:'failed',description:'Instagram publication failed'};
+ if(status==='needs_reconciliation'||status==='uncertain'||entry?.activationState==='uncertain')return {name:'Needs review',icon:'!',style:'warning',description:'Publication result uncertain; check Instagram before retrying'};
+ if(status==='publishing'||status==='queued')return {name:'Publishing',icon:'↻',style:'publishing',description:'Cloud publishing in progress'};
+ if(status==='cancelled')return {name:'Cancelled',icon:'−',style:'cancelled',description:'Publication cancelled'};
+ return {name:'Scheduled',icon:'◷',style:'scheduled',description:entry?.activationState==='active'?'Activated for Instagram publishing':'Scheduled locally; activate for live publishing'};
+}
+const statusBadge=entry=>{const state=calendarStatus(entry);return '<span class="cal-status cal-status--'+state.style+'" title="'+state.description+'" aria-label="'+state.description+'"><span class="cal-status-icon" aria-hidden="true">'+state.icon+'</span>'+state.name+'</span>';};
 export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh,toast}){
  let mode='month',cursor=clampDay(new Date()),items=state.schedules||[],accounts=[],editing=null;
  const media=()=>state.media.filter(m=>m.status==='approved'&&['image/png','image/jpeg','video/mp4'].includes(m.mime));
