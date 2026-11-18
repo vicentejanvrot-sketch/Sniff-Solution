@@ -31,7 +31,7 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
  const drafts=()=>state.drafts.filter(d=>d.status==='approved');
  el.innerHTML=heading('Publishing Calendar','Review schedules and optionally activate individual posts for live Instagram publishing.')+
  '<div class="calendar-bar card"><div class="actions"><button id="cal-prev" aria-label="Previous period">←</button><button id="cal-today">Today</button><button id="cal-next" aria-label="Next period">→</button></div><h2 id="cal-period"></h2><div class="actions"><select id="cal-view" aria-label="Calendar view"><option value="month">Month</option><option value="week">Week</option><option value="day">Day</option></select><button class="primary" id="cal-create">+ Schedule post</button></div></div>'+
- '<div class="note">Scheduling remains local until you explicitly activate an approved future post for cloud publishing. Activation makes that post eligible for public Instagram publishing when due. The cloud worker must also be enabled in Render.</div><div id="cal-body" class="card"></div><div class="section-title"><h2>Publication queue</h2><span id="cal-count"></span></div><div id="cal-list" class="card"></div><div class="actions"><button id="cal-sync">Refresh cloud publishing status</button></div><div class="section-title"><h2>Publishing history</h2><span id="cal-history-count"></span></div><div id="cal-history" class="card"></div><div id="cal-form-area"></div>';
+ '<div class="note">Scheduling remains local until you explicitly activate an approved future post for cloud publishing. Activation makes that post eligible for public Instagram publishing when due. The cloud worker must also be enabled in Render.</div><div id="cal-body" class="card"></div><div class="section-title"><h2>Publication queue</h2><span id="cal-count"></span></div><div id="cal-list" class="card"></div><div class="actions"><button id="cal-sync">Refresh cloud publishing status</button></div><div class="section-title"><h2>Publishing health</h2><button id="cal-health-refresh" type="button">Check health</button></div><div id="cal-health" class="card"><p class="hint">Checking cloud publishing health…</p></div><div class="section-title"><h2>Publishing history</h2><span id="cal-history-count"></span></div><div id="cal-history" class="card"></div><div id="cal-form-area"></div>';
  const q=id=>el.querySelector(id),visible=()=>items.filter(x=>!activeBrand||x.brandId===activeBrand);
  function tile(entry){
   return '<button class="cal-event" data-id="'+esc(entry.id)+'" title="'+esc(entry.caption)+'"><strong>'+esc(entry.localTime.slice(11))+'</strong> · '+esc(entry.username||'Instagram')+'<small>'+statusBadge(entry)+'</small></button>';
@@ -69,6 +69,17 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
   q('#cal-history').innerHTML=completed.length?'<div class="table-wrap"><table><thead><tr><th>Status</th><th>Account</th><th>Scheduled for</th><th>Published at (UTC)</th><th>Instagram media ID</th><th>Post link</th><th>Details</th></tr></thead><tbody>'+completed.map(x=>'<tr><td>'+statusBadge(x)+'</td><td>@'+esc(x.username||'Instagram')+'</td><td>'+esc(x.localTime.replace('T',' '))+'<small>'+esc(x.timezone)+'</small></td><td>'+esc(publishedTime(x)||'—')+'</td><td>'+esc(x.instagramMediaId||'—')+'</td><td>'+(verifiedLink(x.permalink)?'<a href="'+esc(verifiedLink(x.permalink))+'" target="_blank" rel="noopener noreferrer">View Instagram post</a>':'—')+'</td><td><button data-id="'+esc(x.id)+'">View</button></td></tr>').join('')+'</tbody></table></div>':'<p class="hint">No completed publications yet. When a live post is confirmed, its result will appear here after Refresh cloud publishing status.</p>';
   el.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>openForm(items.find(x=>x.id===b.dataset.id)));
   el.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{cursor=new Date(b.dataset.date+'T12:00:00');mode='day';q('#cal-view').value=mode;draw();});
+ }
+ async function loadHealth(){
+  const target=q('#cal-health');if(!target)return;
+  try{
+   const data=await api('/api/schedules/health');
+   const counts=data.summary||{};
+   const labels=[['published','Published'],['scheduled','Scheduled'],['failed','Failed'],['needs_reconciliation','Needs review'],['overdue','Overdue'],['stalled','Stalled']];
+   target.innerHTML='<div class="actions">'+labels.map(([key,label])=>'<span class="cal-health-metric"><strong>'+Number(counts[key]||0)+'</strong> '+label+'</span>').join('')+'</div>'
+    +(data.warnings?.length?'<div class="note">'+data.warnings.map(w=>'<p><strong>'+esc(w.kind)+':</strong> '+esc(w.message)+'</p>').join('')+'</div>':'<p class="hint">No overdue or stalled cloud publications detected.</p>')
+    +'<small class="hint">Checked '+esc(data.checkedAt||'')+' UTC. Updates on demand; a sleeping free instance may delay scheduled publishing.</small>';
+  }catch{target.innerHTML='<p class="hint">Publishing health unavailable. Verify the cloud service and refresh again; do not duplicate a pending post.</p>';}
  }
  function optionList(list,selected,display){
   return '<option value="">Select…</option>'+list.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===selected?'selected':'')+'>'+esc(display(x))+'</option>').join('');
@@ -112,8 +123,18 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
    +'<p><strong>Published:</strong> '+esc(publishedTime(record)||'Not yet confirmed')+'</p>'
    +'<p><strong>Instagram media ID:</strong> '+esc(record.instagramMediaId||'Not assigned')+'</p>'
    +(verifiedLink(record.permalink)?'<p><a href="'+esc(verifiedLink(record.permalink))+'" target="_blank" rel="noopener noreferrer">View the published post on Instagram</a></p>':'')
-   +(record.lastError?'<p class="hint"><strong>Review note:</strong> '+esc(record.lastError)+'</p>':'');
+   +(record.lastError?'<p class="hint"><strong>Review note:</strong> '+esc(record.lastError)+'</p>':'')
+   +'<div class="actions"><button type="button" id="cal-show-audit">View audit history</button>'+(record.status==='failed'&&record.cloudStatus==='failed'&&!record.instagramMediaId&&!record.containerId?'<button type="button" id="cal-retry">Retry failed preflight</button>':'')+'</div><div id="cal-audit"></div>';
    q('#cal-form-area').querySelector('#cal-form').prepend(details);
+   q('#cal-show-audit').onclick=async()=>{
+    const target=q('#cal-audit');target.textContent='Loading audit history…';
+    try{const result=await api('/api/schedules/'+record.id+'/history');target.innerHTML='<h4>Publication events</h4>'+(result.events||[]).map(e=>'<p><strong>'+esc(e.event_type)+'</strong> '+esc(e.created_at||'')+' — '+esc(e.detail||'')+'</p>').join('')||'<p>No audit events yet.</p>';}catch{target.textContent='Unable to load audit history.';}
+   };
+   const retry=q('#cal-retry');
+   if(retry)retry.onclick=async()=>{
+    if(!confirm('Retry this confirmed pre-publication failure? Sniff will publish the approved post as soon as the cloud worker runs. Do not proceed if it may already be on Instagram.'))return;
+    retry.disabled=true;try{await send('/api/schedules/'+record.id+'/retry','POST',{});await refresh();items=await api('/api/schedules');closeForm();draw();loadHealth();toast('Preflight failure queued for manual retry.');}catch(e){retry.disabled=false;toast(e.message,true);}
+   };
   }
   const form=q('#cal-form');form.elements.brandId.value=initialBrand;
   const updateZoneClock=()=>{const output=q('#cal-zone-clock');if(output)output.textContent='Current local time: '+currentZoneClock(form.elements.timezone.value);};
@@ -146,7 +167,8 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
  q('#cal-next').onclick=()=>{cursor=mode==='month'?new Date(cursor.getFullYear(),cursor.getMonth()+1,1):dateAt(cursor,mode==='week'?7:1);draw();};
  q('#cal-today').onclick=()=>{cursor=clampDay(new Date());draw();};
  q('#cal-create').onclick=()=>openForm();
- q('#cal-sync').onclick=async()=>{const button=q('#cal-sync');button.disabled=true;try{items=await send('/api/schedules/sync','POST',{});await refresh();draw();toast('Cloud publishing status refreshed.');}catch(err){toast(err.message,true);}finally{button.disabled=false;}};
- draw();
+ q('#cal-health-refresh').onclick=loadHealth;
+ q('#cal-sync').onclick=async()=>{const button=q('#cal-sync');button.disabled=true;try{items=await send('/api/schedules/sync','POST',{});await refresh();draw();loadHealth();toast('Cloud publishing status refreshed.');}catch(err){toast(err.message,true);}finally{button.disabled=false;}};
+ draw();loadHealth();
  api('/api/social/accounts').then(v=>{accounts=v.accounts||[];if(q('#cal-form'))updateForm();if(!accounts.length)toast('Connect an Instagram account in Social Accounts before scheduling.',true);}).catch(e=>toast(e.message,true));
 }
