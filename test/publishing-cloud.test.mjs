@@ -87,3 +87,18 @@ test('social repository lists only metadata and scopes disconnect to workspace a
  assert.equal(calls[1].url.searchParams.get('brand_id'),'eq.travel');
  assert.equal(JSON.parse(calls[1].opts.body).token_ciphertext,null);
 });
+
+test('cloud worker boot uses the initialized connection and schedules 30-second polling only when enabled',async()=>{
+ const {startPublishingWorker}=await import('../cloud/publishing-server.mjs');
+ let calls=0;let scheduled=null;let unref=false;
+ const connection={publishingEnabled:true,publisher:{pump:async()=>{calls++;return 0;}}};
+ const timer=startPublishingWorker(connection,{schedule:(fn,ms)=>{scheduled={fn,ms};return {unref(){unref=true;}};}});
+ assert.ok(timer);assert.equal(scheduled.ms,30000);assert.equal(unref,true);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls,1);
+ await scheduled.fn();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls,2);
+ assert.equal(startPublishingWorker({...connection,publishingEnabled:false},{schedule:()=>{throw Error('disabled worker must not schedule');}}),null);
+ assert.equal(startPublishingWorker(null,{schedule:()=>{throw Error('missing connection must not schedule');}}),null);
+});
