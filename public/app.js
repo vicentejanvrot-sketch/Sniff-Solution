@@ -153,7 +153,7 @@ function brandDialog(brand={},completedResearch=null){
  const form=modal.querySelector('#brand-form'),button=modal.querySelector('#suggest-brand'),status=modal.querySelector('#brand-research-status'),evidence=modal.querySelector('#brand-research-evidence');
  const isCurrent=()=>!closed&&modal.open&&session===brandDialogSequence;
  const fontChoice=modal.querySelector('#brand-font-choice');let suggestedFont='';
- function updatePalettePreview(){renderSwatches(modal.querySelector('[data-palette-preview]'),form.elements.palette.value,{removable:true,onRemove:index=>{const colors=form.elements.palette.value.split(/[\\s,]+/).filter(Boolean);colors.splice(index,1);form.elements.palette.value=colors.join(', ');updatePalettePreview();}});}
+ function updatePalettePreview(){renderSwatches(modal.querySelector('[data-palette-preview]'),form.elements.palette.value,{removable:true,onRemove:index=>{const colors=form.elements.palette.value.split(/[\s,]+/).filter(Boolean);colors.splice(index,1);form.elements.palette.value=colors.join(', ');updatePalettePreview();}});}
  function updateFontPreview(){
   const value=form.elements.font.value;renderFontSample(modal.querySelector('#brand-font-preview'),value,'Font field preview');
   const match=[...fontChoice.options].find(o=>o.value&&o.value.toLowerCase()===value.trim().toLowerCase());fontChoice.value=match?match.value:'';
