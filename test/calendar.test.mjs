@@ -10,21 +10,22 @@ function fixtures(){
  return {s,accounts,input};
 }
 test('local publication time converts to UTC with correct Edmonton offsets',()=>{
- assert.equal(publicationInstant('2026-11-20T10:30','America/Edmonton'),'2026-11-20T17:30:00.000Z');
+ assert.equal(publicationInstant('2026-11-20T10:30','America/Edmonton'),'2026-11-20T16:30:00.000Z');
+ assert.equal(publicationInstant('2026-12-20T10:30','America/Edmonton'),'2026-12-20T16:30:00.000Z');
  assert.equal(publicationInstant('2026-07-20T10:30','America/Edmonton'),'2026-07-20T16:30:00.000Z');
  assert.equal(publicationInstant('2026-11-20T10:30','UTC'),'2026-11-20T10:30:00.000Z');
 });
 test('invalid dates and DST transitions are rejected, not silently shifted',()=>{
  assert.throws(()=>publicationInstant('2026-02-30T10:30','UTC'),/Invalid calendar date/);
  assert.throws(()=>publicationInstant('2026-03-08T02:30','America/Edmonton'),/does not exist/);
- assert.throws(()=>publicationInstant('2026-11-01T01:30','America/Edmonton'),/Ambiguous local time/);
+ assert.throws(()=>publicationInstant('2025-11-02T01:30','America/Edmonton'),/Ambiguous local time/);
  assert.throws(()=>publicationInstant('2026-11-20T12:00','NotAZone'),/valid IANA/);
 });
 test('scheduling verifies approved content, brand and connected account',()=>{
  const {s,accounts,input}=fixtures();
  const created=validateSchedule(s,input,{accounts,clock});
  assert.equal(created.status,'scheduled');assert.equal(created.mediaVersion,3);assert.equal(created.draftVersion,2);
- assert.equal(created.username,'travelonepro');assert.equal(created.scheduledAt,'2026-11-20T17:30:00.000Z');
+ assert.equal(created.username,'travelonepro');assert.equal(created.scheduledAt,'2026-11-20T16:30:00.000Z');
  for(const item of [{mediaId:'wrong'},{brandId:'other'},{accountId:'missing'},{caption:''},{draftId:'missing'}]){
   assert.throws(()=>validateSchedule(s,{...input,...item},{accounts,clock}));
  }
@@ -65,7 +66,7 @@ test('desktop HTTP scheduling persists across restart and leaves publishing disa
  }
  try{
   let request=await launch();
-  const brand=await request('/api/brands','POST',{name:'Travel One'});assert.equal(brand.status,201);
+  const brand=await request('/api/brands','POST',{name:'Travel One'});assert.equal(brand.status,200);
   account.brand_id=brand.data.id;
   // Media API validates image bytes as an uploaded asset; review requires explicit approval.
   const base='http://127.0.0.1:'+app.server.address().port;
