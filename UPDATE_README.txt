@@ -3,7 +3,7 @@ SNIFF SOLUTION - COMPLETE APP FOLDER
 This ZIP is the complete runnable Windows app: SniffSolution.exe,
 START_SNIFF.cmd, all app files, and bundled Node.js, Python, FFmpeg and FFprobe.
 VERSION.txt and build-info.json show its version and source commit.
-This update is version 0.3.0-beta.5 (development prerelease). Social Accounts and Publishing Calendar support protected cloud activation per approved post. Live publishing requires explicit cloud setup and verification; no existing schedules are activated automatically. This update fixes the Publishing Calendar refresh error caused by missing Publishing history elements. After refreshing cloud publishing status, confirmed Instagram post IDs, timestamps and verified links appear in Publishing history. See PHASE3_CALENDAR_TEST_GUIDE.md. PHASE2_TEST_GUIDE.md contains the complete
+This update is version 0.3.0-beta.6 (development prerelease). Social Accounts and Publishing Calendar support protected cloud activation per approved post. Live publishing requires explicit cloud setup and verification; no existing schedules are activated automatically. This update fixes the Publishing Calendar refresh error caused by missing Publishing history elements. After refreshing cloud publishing status, confirmed Instagram post IDs, timestamps and verified links appear in Publishing history. See PHASE3_CALENDAR_TEST_GUIDE.md. PHASE2_TEST_GUIDE.md contains the complete
 step-by-step acceptance tests and remaining external requirements.
 (GitHub "Code > Download ZIP" / "Source code" archives are NOT this app.)
 
@@ -40,3 +40,5 @@ source-code folder is separate and is not imported automatically.
 For AI suggestions, a provider key and model must be configured (tray menu >
 Edit API settings, then Settings & Costs). Suggestions stay editable and
 nothing is saved until you choose Save brand.
+
+Brand Studio: website suggestions now include up to 24 CSS/SVG palette candidates instead of only AI-selected colours. Remove individual colour swatches before saving. Existing brands and palettes are preserved.
