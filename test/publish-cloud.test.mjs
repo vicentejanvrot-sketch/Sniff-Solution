@@ -15,6 +15,7 @@ function setup(){
    if(pathname.endsWith('/media_publish'))return Response.json({id:'202620262026'});
    if(pathname.endsWith('/media'))return Response.json({id:'100200300'});
    if(pathname.endsWith('/100200300'))return Response.json({status_code:'FINISHED'});
+   if(pathname.endsWith('/202620262026'))return Response.json({permalink:'https://www.instagram.com/p/TESTCODE/'});
    throw Error('Unknown Meta call');
   }
   if(pathname.includes('/storage/v1/object/marketing-media/')){
@@ -83,4 +84,17 @@ test('video publishes as a Reel only after processing status FINISHED',async()=>
  assert.equal(jobs[0].status,'published');
  assert.ok(graphCalls.some(c=>c.body?.get('media_type')==='REELS'));
  assert.ok(graphCalls.some(c=>c.method==='GET'&&c.path.endsWith('/100200300')));
+});
+
+test('cloud history resolves real Meta post link while retaining published ID and never creating another post',async()=>{
+ const {publisher,input,advance,graphCalls}=setup();
+ const p=input();
+ await publisher.stage(p.id,'image/jpeg',Buffer.from([255,216,255,217]));
+ await publisher.enqueue(p);advance(180000);await publisher.pump();
+ const result=await publisher.list();
+ assert.equal(result.length,1);
+ assert.equal(result[0].status,'published');
+ assert.equal(result[0].instagram_media_id,'202620262026');
+ assert.equal(result[0].permalink,'https://www.instagram.com/p/TESTCODE/');
+ assert.equal(graphCalls.filter(c=>c.path.endsWith('/media_publish')).length,1);
 });
