@@ -1,4 +1,5 @@
 import {mountSocial} from './social.js';
+import {mountCalendar} from './calendar.js';
 import {elapsedLabel} from './timing.js';
 import {dailyCostsHTML,bindDailyCosts} from './reconciliation.js';
 import {mountStudio,visibleMedia} from './production.js';
@@ -25,7 +26,7 @@ function heading(title,description,action=''){return '<div class="heading"><div>
 function empty(title,text,button=''){return '<div class="empty"><h3>'+esc(title)+'</h3><p>'+esc(text)+'</p>'+button+'</div>';}
 function brandOptions(){return '<option value="">Choose a brand</option>'+state.brands.map(b=>'<option value="'+b.id+'" '+(b.id===activeBrand?'selected':'')+'>'+esc(b.name)+'</option>').join('');}
 function render(){
- const nav=[['dashboard','Workspace'],['brands','Brand Studio'],['skills','Content Skills'],['images','Image Studio'],['video','Video Studio'],['drafts','Drafts & Review'],['media','Media Library'],['social','Social Accounts'],['jobs','Activity'],['settings','Settings & Costs']];
+ const nav=[['dashboard','Workspace'],['brands','Brand Studio'],['skills','Content Skills'],['images','Image Studio'],['video','Video Studio'],['drafts','Drafts & Review'],['media','Media Library'],['social','Social Accounts'],['calendar','Publishing Calendar'],['jobs','Activity'],['settings','Settings & Costs']];
  app.innerHTML='<div class="layout"><aside><div class="logo"><span class="mark">S</span><div><strong>Sniff Solution</strong><small>YOUR GROWTH WORKSPACE</small></div></div><nav aria-label="Main navigation">'+nav.map(([id,label])=>'<button data-page="'+id+'" class="'+(page===id?'active':'')+'" '+(page===id?'aria-current="page"':'')+'>'+label+(id==='jobs'?'<span id="job-count">'+state.jobs.filter(j=>['queued','running'].includes(j.status)).length+'</span>':'')+'</button>').join('')+'</nav><div class="side-note">Phase 3 beta · v'+esc(state.appVersion||'restart required')+(state.sourceCommit?' · build '+esc(state.sourceCommit.slice(0,7)):'')+'<br>One owner. Your brands. Your ideas.<br><br>Storage: '+esc(state.storageMode)+'<br>Phase 3 development preview.</div></aside><div><header><strong>Your next good idea starts here.</strong><div class="controls"><label class="sr-only" for="brand-switch">Active brand</label><select id="brand-switch"><option value="">All brands</option>'+state.brands.map(b=>'<option value="'+b.id+'" '+(b.id===activeBrand?'selected':'')+'>'+esc(b.name)+'</option>').join('')+'</select><span class="pill" id="app-version" title="'+esc(state.build||'')+'">v'+esc(state.appVersion||'restart required')+'</span><span class="pill">Developer owner</span><span class="avatar" aria-label="Vicente Miranda">VM</span></div></header><main id="main"></main></div></div>';
  document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
  document.querySelector('#brand-switch').onchange=e=>{activeBrand=e.target.value;localStorage.setItem('sniff-brand',activeBrand);activeDraft='';renderPage();};
@@ -42,6 +43,7 @@ function renderPage(){
  if(page==='media')media(main);
  if(page==='jobs')jobs(main);
  if(page==='settings')settings(main);
+ if(page==='calendar')mountCalendar(main,{state,activeBrand,esc,heading,api,send,refresh,toast});
  if(page==='social')mountSocial(main,{state,activeBrand,esc,heading,brandOptions,api,send,toast});
  if(['images','video'].includes(page))mountStudio(main,{state,kind:page==='video'?'video':'image',activeBrand,esc,heading,brandOptions,send,api,refresh,navigate,toast,money,preview:previewMedia});
  if(!state.appVersion){const notice=document.createElement('div');notice.className='note warning';notice.textContent='Updated files detected, but the old server is still running. Quit Sniff Solution from its tray icon, then run START_SNIFF.cmd from the updated app folder.';main.prepend(notice);}
@@ -312,7 +314,7 @@ function settings(el){
  '<details><summary>Recent audit history</summary>'+state.audit.slice(0,25).map(a=>'<p class="hint">'+esc(date(a.at))+' · '+esc(a.action)+' · '+esc(a.actor)+'</p>').join('')+'</details>';
  document.querySelector('#settings-form').onsubmit=async e=>{e.preventDefault();const btn=e.submitter;btn.disabled=true;const data=Object.fromEntries(new FormData(e.target));const providers=Object.fromEntries(['openai','anthropic','perplexity'].map(p=>[p,{model:data[p+'-model'],inputRate:data[p+'-inputRate'],outputRate:data[p+'-outputRate']}]));
  try{await send('/api/settings','PUT',{monthlyBudget:data.monthlyBudget,reservePerJob:data.reservePerJob,providers,production:{imageModel:data.imageModel,reserve:data.mediaReserve}});await refresh();renderPage();toast('Settings saved.');}catch(err){toast(err.message,true);}finally{btn.disabled=false;}};
- document.querySelector('#backup').onclick=()=>{const {brands,drafts,jobs,media,audit,settings,version,reconciliations=[]}=state;download(new Blob([JSON.stringify({version,brands,drafts,jobs,media,audit,settings,reconciliations},null,2)],{type:'application/json'}),'sniff-workspace-backup.json');};
+ document.querySelector('#backup').onclick=()=>{const {brands,drafts,jobs,media,audit,settings,version,reconciliations=[],schedules=[]}=state;download(new Blob([JSON.stringify({version,brands,drafts,jobs,media,audit,settings,reconciliations,schedules},null,2)],{type:'application/json'}),'sniff-workspace-backup.json');};
 }
 async function init(){
  try{await refresh();render();}catch(e){app.innerHTML='<div class="card connection-error"><h1>Workspace unavailable</h1><p>'+esc(e.message)+'</p><button id="retry">Try again</button></div>';document.querySelector('#retry').onclick=init;}
