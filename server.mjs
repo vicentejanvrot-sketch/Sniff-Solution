@@ -152,12 +152,12 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      return json(res,await publishing.disconnect(b.accountId,b.brandId));
     }
     if(p==='/api/schedules/health'&&req.method==='GET')return json(res,await publishing.health());
-    if(/^\\/api\\/schedules\\/[^/]+\\/history$/.test(p)&&req.method==='GET'){
+    if(/^\/api\/schedules\/[^/]+\/history$/.test(p)&&req.method==='GET'){
      const id=p.split('/')[3];
      if(!(store.read().schedules||[]).some(x=>x.id===id))fail('Unknown publication.',404);
      return json(res,await publishing.history(id));
     }
-    if(/^\\/api\\/schedules\\/[^/]+\\/retry$/.test(p)&&req.method==='POST'){
+    if(/^\/api\/schedules\/[^/]+\/retry$/.test(p)&&req.method==='POST'){
      const id=p.split('/')[3],item=(store.read().schedules||[]).find(x=>x.id===id);
      if(!item||item.status!=='failed'||item.cloudStatus!=='failed'||!item.activationState||item.instagramMediaId||item.containerId)fail('This publication is not confirmed safe to retry. Refresh status first.',409);
      const result=await publishing.retry(id);
