@@ -72,10 +72,11 @@ test('desktop HTTP scheduling persists across restart and leaves publishing disa
   const uploaded=await fetch(base+'/api/media',{method:'POST',headers:{'X-Sniff-Client':'1','X-Brand-Id':brand.data.id,'X-File-Name':'photo.jpg','Content-Type':'image/jpeg'},body:Buffer.from([255,216,255,217])});
   assert.equal(uploaded.status,201);
   const media=await uploaded.json();
-  const blocked=await request('/api/schedules','POST',{brandId:brand.data.id,accountId:uuid,mediaId:media.id,caption:'Visit #travel',localTime:'2026-11-20T10:30',timezone:'America/Edmonton'});
+  const futureLocal=new Date(Date.now()+7*86400000).toISOString().slice(0,10)+'T12:30';
+  const blocked=await request('/api/schedules','POST',{brandId:brand.data.id,accountId:uuid,mediaId:media.id,caption:'Visit #travel',localTime:futureLocal,timezone:'America/Edmonton'});
   assert.equal(blocked.status,409);
   const review=await request('/api/media/'+media.id,'PUT',{version:1,status:'approved',caption:'Visit #travel'});assert.equal(review.status,200);
-  const scheduled=await request('/api/schedules','POST',{brandId:brand.data.id,accountId:uuid,mediaId:media.id,caption:'Visit #travel',localTime:'2026-11-20T10:30',timezone:'America/Edmonton'});
+  const scheduled=await request('/api/schedules','POST',{brandId:brand.data.id,accountId:uuid,mediaId:media.id,caption:'Visit #travel',localTime:futureLocal,timezone:'America/Edmonton'});
   assert.equal(scheduled.status,201,JSON.stringify(scheduled.data));
   assert.equal(scheduled.data.status,'scheduled');
   assert.equal((await request('/api/media/'+media.id,'PUT',{version:2,status:'needs-review',caption:''})).status,409);
