@@ -22,7 +22,7 @@ export function calendarStatus(entry){
 const publishedTime=entry=>entry.publishedAt?new Date(entry.publishedAt).toISOString().replace('T',' ').replace('.000Z',' UTC'):null;
 const verifiedLink=value=>{
  if(typeof value!=='string')return null;
- try{const url=new URL(value);return url.protocol==='https:'&&['www.instagram.com','instagram.com'].includes(url.hostname)&&/^\\/(p|reel|tv)\\/[A-Za-z0-9_-]+\\/?$/.test(url.pathname)&&!url.search&&!url.hash?url.href:null;}catch{return null;}
+ try{const url=new URL(value);return url.protocol==='https:'&&['www.instagram.com','instagram.com'].includes(url.hostname)&&/^\/(p|reel|tv)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)&&!url.search&&!url.hash?url.href:null;}catch{return null;}
 };
 const statusBadge=entry=>{const state=calendarStatus(entry);return '<span class="cal-status cal-status--'+state.style+'" title="'+state.description+'" aria-label="'+state.description+'"><span class="cal-status-icon" aria-hidden="true">'+state.icon+'</span>'+state.name+'</span>';};
 export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh,toast}){
