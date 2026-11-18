@@ -3,7 +3,7 @@ SNIFF SOLUTION - COMPLETE APP FOLDER
 This ZIP is the complete runnable Windows app: SniffSolution.exe,
 START_SNIFF.cmd, all app files, and bundled Node.js, Python, FFmpeg and FFprobe.
 VERSION.txt and build-info.json show its version and source commit.
-This update is version 0.3.0-beta.3 (development prerelease). Social Accounts and Publishing Calendar support protected cloud activation per approved post. Live publishing requires explicit cloud setup and verification; no existing schedules are activated automatically. See PHASE3_CALENDAR_TEST_GUIDE.md. PHASE2_TEST_GUIDE.md contains the complete
+This update is version 0.3.0-beta.4 (development prerelease). Social Accounts and Publishing Calendar support protected cloud activation per approved post. Live publishing requires explicit cloud setup and verification; no existing schedules are activated automatically. After refreshing cloud publishing status, confirmed Instagram post IDs, timestamps and verified links appear in Publishing history. See PHASE3_CALENDAR_TEST_GUIDE.md. PHASE2_TEST_GUIDE.md contains the complete
 step-by-step acceptance tests and remaining external requirements.
 (GitHub "Code > Download ZIP" / "Source code" archives are NOT this app.)
 
