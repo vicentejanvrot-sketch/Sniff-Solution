@@ -19,3 +19,15 @@ img.media-preview{width:auto;height:auto;max-width:100%;max-height:65vh;display:
 
 /* Phase 3.3 calendar */
 .calendar-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:15px}.calendar-bar h2{margin:0}.calendar-bar select{width:auto}.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:#dce4db;border:1px solid #dce4db;border-radius:9px;overflow:hidden}.cal-grid>div,.cal-grid>.cal-weekday{min-width:0;background:#fff}.cal-weekday{display:block;text-align:center;padding:12px 3px;background:#eff4eb!important;font-size:12px}.cal-outside{opacity:.42}.cal-cell{padding:7px;min-height:112px;overflow:hidden}.cal-today{background:#f0f8eb}.cal-date{border:0;background:transparent;padding:5px 8px;min-width:30px}.cal-today .cal-date{background:#226448;color:#fff;border-radius:40px}.cal-event{display:block;padding:7px 5px;text-align:left;font-weight:normal;background:#e2efe3;border:1px solid #c7dfcb;border-radius:6px;line-height:1.2;width:100%;white-space:normal;overflow-wrap:anywhere;font-size:11px;margin:3px 0}.cal-event small{display:block;font-size:10px;margin-top:4px}.cal-day .cal-cell{min-height:200px}.cal-day .cal-event{max-width:320px}.cal-editor{margin-top:22px}.cal-editor select{max-width:100%}.cal-preview{min-height:90px;padding:12px;border:1px dashed #cbd8cd;border-radius:9px;background:#f9fbf8}.cal-preview-image{display:block;max-height:300px;max-width:100%;margin:auto;object-fit:contain}@media(max-width:900px){.cal-grid{overflow-x:auto;grid-template-columns:repeat(7,minmax(95px,1fr))}.cal-cell{min-height:95px}.calendar-bar{justify-content:flex-start}}
+
+
+/* Publishing Calendar status indicators: icon + label + color, never color alone. */
+.cal-status{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:3px 7px;border-radius:6px;font-weight:600;font-size:11px;line-height:1.3;white-space:normal}
+.cal-status-icon{display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;width:15px;height:15px;flex:none;border:1.5px solid currentColor;border-radius:50%}
+.cal-status--scheduled{color:#205b81;background:#e5f3fb}
+.cal-status--published{color:#166534;background:#e0f4e5}
+.cal-status--failed{color:#991b1b;background:#fee2e2}
+.cal-status--publishing{color:#795311;background:#fff0c2}
+.cal-status--warning{color:#87471b;background:#ffedd5}
+.cal-status--cancelled{color:#52525b;background:#e4e4e7}
+.cal-event .cal-status{margin-top:3px}
