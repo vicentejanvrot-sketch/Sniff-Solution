@@ -48,7 +48,7 @@ function setup(){
     return Response.json(result);
    }
    if(method==='PATCH'){
-    const fields=JSON.parse(opt.body),job=jobs.find(j=>j.id===u.searchParams.get('id')?.slice(3)&&(u.searchParams.get('status')?.startsWith('in.')?u.searchParams.get('status').includes(j.status):j.status===u.searchParams.get('status')?.replace('eq.',''))&&(u.searchParams.has('attempts')?j.attempts===0:true));
+    const fields=JSON.parse(opt.body),job=jobs.find(j=>j.id===u.searchParams.get('id')?.slice(3)&&(u.searchParams.get('status')?.startsWith('in.')?u.searchParams.get('status').includes(j.status):j.status===u.searchParams.get('status')?.replace('eq.',''))&&(u.searchParams.has('attempts')?j.attempts===Number(u.searchParams.get('attempts').replace('eq.','')):true)&&(u.searchParams.has('container_id')?j.container_id==null:true)&&(u.searchParams.has('instagram_media_id')?j.instagram_media_id==null:true));
     if(!job)return Response.json([]);
     Object.assign(job,fields);return Response.json([job]);
    }
