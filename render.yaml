@@ -1,0 +1,21 @@
+# Phase 3 staging foundation. No publishing worker or live OAuth enabled.
+services:
+  - type: web
+    name: sniff-publishing
+    runtime: node
+    branch: phase3-automated-publishing
+    plan: free
+    buildCommand: node --check cloud/publishing-server.mjs && node --test test/publishing-cloud.test.mjs test/publishing.test.mjs
+    startCommand: node cloud/publishing-server.mjs
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PUBLISHING_ENABLED
+        value: "false"
+      - key: META_APP_ID
+        value: "1436334624843806"
+      - key: META_CONFIGURATION_ID
+        value: "1828125495054410"
+      - key: PUBLISHING_TOKEN_ENCRYPTION_KEY
+        generateValue: true
