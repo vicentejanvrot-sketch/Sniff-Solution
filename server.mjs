@@ -1,3 +1,4 @@
+import {desktopPublishing} from './lib/desktop-publishing.mjs';
 import {videoBriefPrompt} from './lib/video-brief.mjs';
 import http from 'node:http';
 import {spawn} from 'node:child_process';
@@ -25,6 +26,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
  const store=await new Store({dir,mode:env.STORAGE_MODE||'local',url:env.SUPABASE_URL||'',key:env.SUPABASE_SECRET_KEY||'',workspace:env.WORKSPACE_ID||'developer',fetcher}).init();
  const enabled=new Set((env.ENABLED_MODULES||'marketing').split(',').map(x=>x.trim()));
  const ready=providerStatus(env);
+ const publishing=desktopPublishing({env,fetcher});
  const uploads=path.join(store.dir,'uploads');await mkdir(uploads,{recursive:true,mode:0o700});
  const thumbnailDir=path.join(store.dir,'thumbnails');await mkdir(thumbnailDir,{recursive:true,mode:0o700});
  const thumbnailJobs=new Map();let thumbnailTail=Promise.resolve();
@@ -133,6 +135,19 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     if(p==='/api/state'&&req.method==='GET')return json(res,publicState());
     if(p.startsWith('/api/sniff')||p.startsWith('/api/integration'))fail('This module is not enabled in Phase 1.',403);
     if(!enabled.has('marketing'))fail('AI Marketing Studio is not enabled.',403);
+    if(p==='/api/social/accounts'&&req.method==='GET'){
+     if(!publishing.configured)return json(res,{configured:false,accounts:[]});
+     const result=await publishing.accounts();return json(res,{configured:true,accounts:result.accounts.filter(a=>store.read().brands.some(b=>b.id===a.brand_id))});
+    }
+    if(p==='/api/social/connect'&&req.method==='POST'){
+     const b=await jsonBody(req);if(!store.read().brands.some(x=>x.id===b.brandId))fail('Choose an existing brand.',404);
+     if(typeof b.expectedUsername!=='string'||! /^[a-zA-Z0-9._]{1,30}$/.test(b.expectedUsername))fail('Enter an Instagram username without @.');
+     return json(res,await publishing.connect(b.brandId,b.expectedUsername));
+    }
+    if(p==='/api/social/disconnect'&&req.method==='POST'){
+     const b=await jsonBody(req);if(!store.read().brands.some(x=>x.id===b.brandId))fail('Brand not found.',404);
+     return json(res,await publishing.disconnect(b.accountId,b.brandId));
+    }
     if(p==='/api/fonts/refresh'&&req.method==='POST'){fontCatalog=await fontCatalogProvider({refresh:true});return json(res,publicFonts(fontCatalog));}
     if(p==='/api/production'&&req.method==='POST'){
      const b=await jsonBody(req);
@@ -326,6 +341,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    }
    if(!['GET','HEAD'].includes(req.method))fail('Method not allowed.',405);
    const staticFiles={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+   staticFiles['/social.js']=['social.js','text/javascript; charset=utf-8'];
    staticFiles['/production.js']=['production.js','text/javascript; charset=utf-8'];
    staticFiles['/dictation.js']=['dictation.js','text/javascript; charset=utf-8'];
    staticFiles['/thumbnails.js']=['thumbnails.js','text/javascript; charset=utf-8'];
