@@ -29,7 +29,7 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
  '<div class="note">Scheduling remains local until you explicitly activate an approved future post for cloud publishing. Activation makes that post eligible for public Instagram publishing when due. The cloud worker must also be enabled in Render.</div><div id="cal-body" class="card"></div><div class="section-title"><h2>Publication queue</h2><span id="cal-count"></span></div><div id="cal-list" class="card"></div><div class="actions"><button id="cal-sync">Refresh cloud publishing status</button></div><div id="cal-form-area"></div>';
  const q=id=>el.querySelector(id),visible=()=>items.filter(x=>!activeBrand||x.brandId===activeBrand);
  function tile(entry){
-  return '<button class="cal-event" data-id="'+esc(entry.id)+'" title="'+esc(entry.caption)+'"><strong>'+esc(entry.localTime.slice(11))+'</strong> · '+esc(entry.username||'Instagram')+'<small>'+esc(statusLabel(entry.status))+'</small></button>';
+  return '<button class="cal-event" data-id="'+esc(entry.id)+'" title="'+esc(entry.caption)+'"><strong>'+esc(entry.localTime.slice(11))+'</strong> · '+esc(entry.username||'Instagram')+'<small>'+statusBadge(entry)+'</small></button>';
  }
  function dayCell(d,compact=false){
   const key=dateKey(d),events=visible().filter(x=>x.localTime.startsWith(key));
@@ -57,7 +57,7 @@ export function mountCalendar(el,{state,activeBrand,esc,heading,api,send,refresh
   q('#cal-count').textContent=sorted.length+' posts';
   q('#cal-list').innerHTML=sorted.length?'<div class="table-wrap"><table><thead><tr><th>Scheduled for</th><th>Brand / account</th><th>Asset</th><th>Status</th><th>Action</th></tr></thead><tbody>'+sorted.map(x=>{
    const b=state.brands.find(v=>v.id===x.brandId),m=state.media.find(v=>v.id===x.mediaId);
-   return '<tr><td>'+esc(x.localTime.replace('T',' '))+'<small>'+esc(x.timezone)+'</small></td><td>'+esc(b?.name||'Deleted brand')+'<small>@'+esc(x.username)+'</small></td><td>'+esc(m?.name||'Missing media')+'</td><td>'+esc(statusLabel(x.status))+'</td><td><button data-id="'+esc(x.id)+'">'+(x.status==='scheduled'&&!x.activationState?'Edit':'View')+'</button></td></tr>';
+   return '<tr><td>'+esc(x.localTime.replace('T',' '))+'<small>'+esc(x.timezone)+'</small></td><td>'+esc(b?.name||'Deleted brand')+'<small>@'+esc(x.username)+'</small></td><td>'+esc(m?.name||'Missing media')+'</td><td>'+statusBadge(x)+'</td><td><button data-id="'+esc(x.id)+'">'+(x.status==='scheduled'&&!x.activationState?'Edit':'View')+'</button></td></tr>';
   }).join('')+'</tbody></table></div>':'<p class="hint">No scheduled posts. Approve media in Media Library, then select Schedule post.</p>';
   el.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>openForm(items.find(x=>x.id===b.dataset.id)));
   el.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{cursor=new Date(b.dataset.date+'T12:00:00');mode='day';q('#cal-view').value=mode;draw();});
