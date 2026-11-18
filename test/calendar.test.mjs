@@ -91,3 +91,15 @@ test('desktop HTTP scheduling persists across restart and leaves publishing disa
   assert.equal((await request('/api/media/'+media.id,'PUT',{version:2,status:'needs-review',caption:''})).status,200);
  }finally{if(app)await app.close().catch(()=>{});await rm(dir,{recursive:true,force:true});}
 });
+
+
+test('calendar status icons distinguish scheduled, published, failed and uncertain cloud states',async()=>{
+ const {calendarStatus}=await import('../public/calendar.js');
+ assert.deepEqual([calendarStatus({status:'scheduled'}).icon,calendarStatus({status:'published'}).icon,calendarStatus({status:'failed'}).icon],['◷','✓','✕']);
+ assert.equal(calendarStatus({status:'scheduled',cloudStatus:'published'}).name,'Published');
+ assert.equal(calendarStatus({status:'scheduled',cloudStatus:'failed'}).name,'Failed');
+ assert.equal(calendarStatus({status:'scheduled',cloudStatus:'needs_reconciliation'}).name,'Needs review');
+ assert.equal(calendarStatus({status:'scheduled',cloudStatus:'publishing'}).name,'Publishing');
+ assert.equal(calendarStatus({status:'cancelled'}).name,'Cancelled');
+ assert.match(calendarStatus({status:'scheduled',activationState:'active'}).description,/Activated/);
+});
