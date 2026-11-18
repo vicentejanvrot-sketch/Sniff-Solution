@@ -34,6 +34,7 @@ function setup(){
    return Response.json(u.searchParams.get('id')==='eq.'+accountId?[authRow]:[]);
   }
   if(pathname.endsWith('/marketing_publish_events')){
+   if(method==='GET')return Response.json(events.filter(e=>e.job_id===u.searchParams.get('job_id')?.slice(3)));
    events.push(JSON.parse(opt.body));return Response.json([events.at(-1)],{status:201});
   }
   if(pathname.endsWith('/marketing_publish_jobs')){
@@ -56,7 +57,7 @@ function setup(){
  }
  const publisher=createCloudPublisher({url:'https://test.supabase.co',key:'sb_secret_test',workspaceId:ws,encryptionKey:key,fetcher:fake,clock:()=>now,sleep:async()=>{}});
  const input=(id=randomUUID())=>({id,accountId,brandId:brand,assetId:randomUUID(),assetVersion:2,mime:'image/jpeg',caption:'Post #travel',scheduledAt:new Date(now+180000).toISOString(),timezone:'America/Edmonton'});
- return {publisher,input,jobs,events,assets,graphCalls,advance:ms=>now+=ms};
+ return {publisher,input,jobs,events,assets,graphCalls,authRow,advance:ms=>now+=ms};
 }
 test('private staged media and atomic publishing claim result in one Instagram post',async()=>{
  const {publisher,input,jobs,graphCalls,advance}=setup();
@@ -97,4 +98,39 @@ test('cloud history resolves real Meta post link while retaining published ID an
  assert.equal(result[0].instagram_media_id,'202620262026');
  assert.equal(result[0].permalink,'https://www.instagram.com/p/TESTCODE/');
  assert.equal(graphCalls.filter(c=>c.path.endsWith('/media_publish')).length,1);
+});
+
+
+test('publishing health reports overdue and stalled jobs without initiating Meta requests',async()=>{
+ const {publisher,input,jobs,graphCalls,advance}=setup();
+ const p=input();await publisher.stage(p.id,'image/jpeg',Buffer.from([255,216,255,217]));await publisher.enqueue(p);
+ advance(12*60_000);
+ const info=await publisher.health();
+ assert.equal(info.summary.overdue,1);
+ assert.equal(graphCalls.length,0);
+ assert.ok(info.warnings.some(x=>x.kind==='overdue'));
+});
+test('expired credentials fail before Meta and require a deliberate, guarded retry',async()=>{
+ const {publisher,input,jobs,graphCalls,authRow,advance}=setup();
+ const p=input();await publisher.stage(p.id,'image/jpeg',Buffer.from([255,216,255,217]));await publisher.enqueue(p);
+ authRow.token_expires_at=new Date(Date.parse('2026-11-18T12:01:00Z')).toISOString();
+ advance(180000);await publisher.pump();
+ assert.equal(jobs[0].status,'failed');assert.equal(jobs[0].attempts,1);
+ assert.equal(graphCalls.length,0);
+ assert.ok((await publisher.history(p.id)).some(e=>e.event_type==='failed'));
+ authRow.token_expires_at=null;
+ assert.equal((await publisher.retry(p.id)).status,'scheduled');
+ await publisher.pump();
+ assert.equal(jobs[0].status,'published');
+ assert.equal(graphCalls.filter(x=>x.path.endsWith('/media_publish')).length,1);
+ await assert.rejects(publisher.retry(p.id),/Manual retry refused/);
+});
+test('uncertain Meta media creation never allows manual retry',async()=>{
+ const {publisher,input,jobs,graphCalls,advance}=setup();
+ const p=input();await publisher.stage(p.id,'image/jpeg',Buffer.from([255,216,255,217]));await publisher.enqueue(p);
+ // Simulate no Instagram response after the container request was issued.
+ const original=globalThis.fetch;
+ advance(180000);jobs[0].status='needs_reconciliation';jobs[0].attempts=1;
+ await assert.rejects(publisher.retry(p.id),/Manual retry refused/);
+ assert.equal(graphCalls.length,0);
 });
