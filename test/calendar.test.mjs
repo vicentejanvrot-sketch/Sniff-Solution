@@ -103,3 +103,15 @@ test('calendar status icons distinguish scheduled, published, failed and uncerta
  assert.equal(calendarStatus({status:'cancelled'}).name,'Cancelled');
  assert.match(calendarStatus({status:'scheduled',activationState:'active'}).description,/Activated/);
 });
+
+
+test('publishing history containers exist before first render and cloud refresh',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const source=await readFile(new URL('../public/calendar.js',import.meta.url),'utf8');
+ const initialMarkup=source.slice(source.indexOf("el.innerHTML=heading("),source.indexOf("const q=id=>"));
+ for(const required of ['id="cal-history-count"','id="cal-history"','id="cal-sync"','id="cal-form-area"']){
+  assert.ok(initialMarkup.includes(required),'Missing initial calendar element '+required);
+ }
+ assert.match(source,/q\('#cal-history-count'\)\.textContent/);
+ assert.match(source,/q\('#cal-history'\)\.innerHTML/);
+});
