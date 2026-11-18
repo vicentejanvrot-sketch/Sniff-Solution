@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createApp} from '../server.mjs';
@@ -65,7 +65,7 @@ test('all thirteen workflows save usable drafts through the HTTP queue with bran
 });
 test('local developer HTTP boundaries and module checks',async t=>{
  const {request,base}=await fixture(t);
- const state=await request('/api/state');assert.equal(state.status,200);assert.equal(state.body.role,'developer-owner');assert.equal(state.body.appVersion,'0.2.5');
+ const state=await request('/api/state');assert.equal(state.status,200);assert.equal(state.body.role,'developer-owner');assert.equal(state.body.appVersion,JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version);
  assert.equal((await fetch(base+'/api/state')).status,403);
  assert.equal((await request('/api/state','GET',undefined,{Origin:'https://evil.example'})).status,403);
  assert.equal((await request('/api/sniff/prospects')).status,403);
