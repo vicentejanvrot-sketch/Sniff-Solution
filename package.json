@@ -1,6 +1,6 @@
 {
   "name": "sniff-solution",
-  "version": "0.2.5",
+  "version": "0.3.0-beta.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,6 +9,6 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check public/timing.js && node --check public/video-brief.js && node --check lib/video-brief.mjs && node --check public/reconciliation.js && node --check lib/fonts.mjs && node --check lib/production.mjs && node --check public/thumbnails.js && node --check public/dictation.js && node --check public/production.js && node --check server.mjs && node --check public/app.js && node --check lib/core.mjs && node --check lib/store.mjs && node --check lib/providers.mjs && node --check lib/website.mjs && node --check lib/brand-research.mjs"
+    "check": "node --check public/timing.js && node --check public/video-brief.js && node --check lib/video-brief.mjs && node --check public/reconciliation.js && node --check lib/fonts.mjs && node --check lib/production.mjs && node --check public/thumbnails.js && node --check public/dictation.js && node --check public/production.js && node --check server.mjs && node --check public/app.js && node --check lib/core.mjs && node --check lib/store.mjs && node --check lib/providers.mjs && node --check lib/website.mjs && node --check lib/brand-research.mjs && node --check public/social.js && node --check lib/desktop-publishing.mjs && node --check lib/social-repository.mjs && node --check lib/meta-login.mjs && node --check lib/meta-connection.mjs && node --check lib/publishing-state-store.mjs && node --check lib/publishing-crypto.mjs && node --check lib/publishing.mjs && node --check cloud/publishing-server.mjs"
   }
 }
