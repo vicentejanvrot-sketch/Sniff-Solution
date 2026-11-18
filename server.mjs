@@ -1,5 +1,6 @@
 import {desktopPublishing} from './lib/desktop-publishing.mjs';
 import {prepareInstagramMedia} from './lib/publish-media.mjs';
+import {reconcilePublication} from './lib/publishing-history.mjs';
 import {validateSchedule,cancelSchedule,ensureNotScheduled} from './lib/calendar.mjs';
 import {videoBriefPrompt} from './lib/video-brief.mjs';
 import http from 'node:http';
@@ -157,11 +158,8 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       for(const item of s.schedules||[]){
        const remote=cloud.get(item.id);
        if(!remote)continue;
-       item.cloudStatus=remote.status;item.activationState='active';
-       item.instagramMediaId=remote.instagram_media_id||null;
-       item.publishedAt=remote.published_at||null;
-       item.lastError=remote.last_error||null;
-       if(['published','failed','cancelled','needs_reconciliation'].includes(remote.status))item.status=remote.status;
+       const {changed,statusTransition}=reconcilePublication(item,remote);
+       if(changed){item.updatedAt=now();if(statusTransition)audit(s,'schedule.cloud_status_'+statusTransition.to,item.id);}
       }
       return s.schedules||[];
      });
