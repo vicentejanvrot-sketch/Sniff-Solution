@@ -42,3 +42,5 @@ Edit API settings, then Settings & Costs). Suggestions stay editable and
 nothing is saved until you choose Save brand.
 
 Brand Studio: website suggestions now include up to 24 CSS/SVG palette candidates instead of only AI-selected colours. Remove individual colour swatches before saving. Existing brands and palettes are preserved.
+
+Publishing Calendar: a new post's Local date and time now defaults to the current time in the selected zone (no automatic one-hour addition). Choose a future time at least one minute ahead before scheduling. Existing schedules are unchanged.
