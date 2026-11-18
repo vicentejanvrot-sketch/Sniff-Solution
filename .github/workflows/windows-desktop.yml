@@ -1,7 +1,7 @@
 name: Windows desktop installer
 on:
   push:
-    branches: [main, windows-desktop-installer]
+    branches: [main, windows-desktop-installer, phase3-automated-publishing]
   workflow_dispatch:
   pull_request:
 permissions:
@@ -69,7 +69,7 @@ jobs:
   publish-release:
     # Stable, versioned download that does not expire or require sign-in (public repository).
     needs: build-installer
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.ref == 'refs/heads/phase3-automated-publishing' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch'))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -84,7 +84,7 @@ jobs:
         with:
           name: Sniff-Solution-Windows-Installer-${{ needs.build-installer.outputs.version }}-${{ needs.build-installer.outputs.short }}
           path: installer
-      - name: Verify release files identify this main commit
+      - name: Verify release files identify this commit
         env:
           VERSION: ${{ needs.build-installer.outputs.version }}
           SHORT: ${{ needs.build-installer.outputs.short }}
@@ -100,6 +100,11 @@ jobs:
           grep -c 'Suggest from website' check/public/app.js
           grep -c 'dialog-version' check/public/app.js
           for f in SniffSolution.exe START_SNIFF.cmd runtime/node.exe runtime/python/python.exe runtime/ffmpeg/ffmpeg.exe runtime/ffmpeg/LICENSE public/thumbnails.js public/dictation.js public/production.js public/timing.js public/video-brief.js lib/video-brief.mjs lib/fonts.mjs lib/production.mjs PHASE2_TEST_GUIDE.md server.mjs desktop/server-runner.mjs; do test -f "check/$f" || { echo "missing $f"; exit 1; }; done
+          if [[ "$GITHUB_REF" == "refs/heads/phase3-automated-publishing" ]]; then
+            [[ "$VERSION" == 0.3.0-beta.* ]] || { echo 'Beta version required'; exit 1; }
+            grep -q 'Social Accounts' check/public/app.js
+            for f in public/social.js lib/desktop-publishing.mjs lib/social-repository.mjs cloud/publishing-server.mjs PHASE3_AUTH_SETUP.md; do test -f "check/$f" || { echo "missing $f"; exit 1; }; done
+          fi
           echo "ZIP verified: $(unzip -Z1 "$zip" | wc -l) entries"
           cp "$zip" release/Sniff-Solution-Windows-Full-App.zip
       - name: Publish GitHub Release
@@ -110,14 +115,22 @@ jobs:
         run: |
           set -euo pipefail
           tag="v${VERSION}-${SHORT}"
-          notes="Complete Windows app for Sniff Solution ${VERSION}, built from main commit ${GITHUB_SHA}.
+          notes="Complete Windows app for Sniff Solution ${VERSION}, built from ${GITHUB_REF_NAME} commit ${GITHUB_SHA}.
 
           Download Sniff-Solution-Windows-Full-App-${VERSION}-${SHORT}.zip (or the same file as Sniff-Solution-Windows-Full-App.zip). It contains SniffSolution.exe, START_SNIFF.cmd, all app files and bundled Node.js and Python. GitHub's Source code archives below are NOT the runnable app.
 
           Update: quit Sniff Solution from its tray icon, extract all files over your app folder, run START_SNIFF.cmd from that folder, and confirm the app shows v${VERSION}. See UPDATE_README.txt inside the ZIP."
+          flags=(--latest)
+          if [[ "$GITHUB_REF" == "refs/heads/phase3-automated-publishing" ]]; then
+            [[ "$VERSION" == 0.3.0-beta.* ]] || exit 1
+            flags=(--prerelease --latest=false)
+            notes="$notes
+
+          Development beta: Social Accounts is included; live Instagram authorization, calendar and automated publishing are not yet ready. Stable Phase 2 remains the latest production release."
+          fi
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" release/*.zip release/SHA256SUMS.txt release/build-info.json installer/*.exe --clobber -R "$GITHUB_REPOSITORY"
           else
             gh release create "$tag" release/*.zip release/SHA256SUMS.txt release/build-info.json installer/*.exe \
-              -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Sniff Solution ${VERSION} (build ${SHORT})" --notes "$notes" --latest
+              -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Sniff Solution ${VERSION} (build ${SHORT})" --notes "$notes" "${flags[@]}"
           fi
