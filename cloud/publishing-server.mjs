@@ -7,7 +7,7 @@ export function createPublishingServer(){
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Content-Type','application/json; charset=utf-8');
-  if(req.method==='GET'&&req.url==='/healthz'){
+  if(req.method==='GET'&&req.url?.split('?')[0]==='/healthz'){
    res.writeHead(200);return res.end(JSON.stringify({ok:true,service:'sniff-publishing',publishingEnabled:false}));
   }
   if(req.method==='GET'&&req.url?.split('?')[0]==='/auth/meta/callback'){
