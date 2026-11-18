@@ -2,6 +2,7 @@
 import http from 'node:http';
 import {pathToFileURL} from 'node:url';
 import {createHash,timingSafeEqual} from 'node:crypto';
+import {createSocialRepository} from '../lib/social-repository.mjs';
 import {metaLoginUrl} from '../lib/meta-login.mjs';
 import {createPublishingStateStore} from '../lib/publishing-state-store.mjs';
 import {createMetaClient,createAccountWriter,completeMetaConnection} from '../lib/meta-connection.mjs';
@@ -13,7 +14,7 @@ export function connectionConfig(env){
  if(!ownerKey||ownerKey.length<32||! /^[A-Za-z0-9+/]{43}=$/.test(encryptionKey||''))throw new Error('Authorization secrets are incomplete.');
  if(!/^\d+$/.test(appId)||!/^\d+$/.test(configurationId)||redirectUri!=='https://sniff-publishing.onrender.com/auth/meta/callback')throw new Error('Invalid Meta configuration.');
  return {appId,configurationId,redirectUri,encryptionKey,ownerKey,workspaceId:env.WORKSPACE_ID||'developer',
- states:createPublishingStateStore({url,key}),meta:createMetaClient({appId,appSecret,redirectUri,apiVersion}),saveAccount:createAccountWriter({url,key})};
+ states:createPublishingStateStore({url,key}),meta:createMetaClient({appId,appSecret,redirectUri,apiVersion}),saveAccount:createAccountWriter({url,key}),accounts:createSocialRepository({url,key})};
 }
 export function createPublishingServer({connection=null}={}){
  return http.createServer(async(req,res)=>{
@@ -24,6 +25,21 @@ export function createPublishingServer({connection=null}={}){
   const send=(status,data)=>{res.writeHead(status);res.end(JSON.stringify(data));};
   const url=new URL(req.url||'/','http://localhost');
   if(req.method==='GET'&&url.pathname==='/healthz')return send(200,{ok:true,service:'sniff-publishing',publishingEnabled:false});
+  if(url.pathname==='/api/social/accounts'||url.pathname==='/api/social/disconnect'){
+   if(!connection)return send(503,{error:'Instagram authorization is not activated.'});
+   if(!equal(req.headers.authorization,'Bearer '+connection.ownerKey))return send(401,{error:'Unauthorized'});
+   try{
+    if(req.method==='GET'&&url.pathname==='/api/social/accounts')return send(200,{accounts:await connection.accounts.list(connection.workspaceId)});
+    if(req.method==='POST'&&url.pathname==='/api/social/disconnect'){
+     if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return send(415,{error:'JSON required'});
+     let length=0;const chunks=[];for await(const chunk of req){length+=chunk.length;if(length>8192)return send(413,{error:'Request too large'});chunks.push(chunk);}
+     const {accountId,brandId}=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+     await connection.accounts.disconnect(connection.workspaceId,brandId,accountId);
+     return send(200,{ok:true});
+    }
+    return send(405,{error:'Method not allowed'});
+   }catch{return send(400,{error:'Social account operation failed.'});}
+  }
   if(req.method==='POST'&&url.pathname==='/auth/meta/start'){
    if(!connection)return send(503,{error:'Instagram authorization is not activated.'});
    if(!equal(req.headers.authorization,'Bearer '+connection.ownerKey))return send(401,{error:'Unauthorized'});
