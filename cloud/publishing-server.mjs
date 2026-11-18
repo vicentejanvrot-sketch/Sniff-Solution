@@ -94,12 +94,18 @@ export function createPublishingServer({connection=null}={}){
   return send(404,{error:'Not found'});
  });
 }
+export function startPublishingWorker(connection,{schedule=setInterval,logger=console}={}){
+ if(!connection?.publishingEnabled)return null;
+ const pump=()=>Promise.resolve().then(()=>connection.publisher.pump()).catch(e=>logger.error('Publishing worker check failed:',e.message));
+ void pump();
+ const interval=schedule(pump,30000);
+ interval?.unref?.();
+ return interval;
+}
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
- const server=createPublishingServer({connection:connectionConfig(process.env)});
+ const connection=connectionConfig(process.env);
+ const server=createPublishingServer({connection});
  server.listen(Number(process.env.PORT||10000),'0.0.0.0');
- if(process.env.PUBLISHING_ENABLED==='true'){
-  const pump=()=>connection?.publisher?.pump().catch(e=>console.error('Publishing worker check failed:',e.message));
-  pump();setInterval(pump,30000).unref();
- }
+ startPublishingWorker(connection);
  process.on('SIGTERM',()=>server.close(()=>process.exit(0)));
 }
