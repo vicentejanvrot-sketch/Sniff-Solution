@@ -1,11 +1,11 @@
-# Phase 3 staging foundation. No publishing worker or live OAuth enabled.
+# Phase 3 staging foundation. Live publishing is gated by PUBLISHING_ENABLED; never enable without a verified owner-approved post.
 services:
   - type: web
     name: sniff-publishing
     runtime: node
     branch: phase3-automated-publishing
     plan: free
-    buildCommand: node --check cloud/publishing-server.mjs && node --test test/publishing-cloud.test.mjs test/publishing.test.mjs
+    buildCommand: node --check cloud/publishing-server.mjs && node --check lib/publish-cloud.mjs && node --test test/publishing-cloud.test.mjs test/publishing.test.mjs test/publish-cloud.test.mjs
     startCommand: node cloud/publishing-server.mjs
     healthCheckPath: /healthz
     envVars:
