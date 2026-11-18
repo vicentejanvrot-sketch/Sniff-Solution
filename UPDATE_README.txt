@@ -3,9 +3,10 @@ SNIFF SOLUTION - COMPLETE APP FOLDER
 This ZIP is the complete runnable Windows app: SniffSolution.exe,
 START_SNIFF.cmd, all app files, and bundled Node.js, Python, FFmpeg and FFprobe.
 VERSION.txt and build-info.json show its version and source commit.
-This update is version 0.4.0. Content Planner connects individually reviewed
-posting-day briefs and Instagram captions to production and local scheduling.
-Performance shows private Instagram Insights observations after cloud setup.
+This update is version 0.4.1. Dictate controls now appear on editable long-text
+fields throughout the app, including campaign goals, daily briefs/captions,
+brand descriptions, content skills, draft editing and media/calendar captions.
+Speech appends to typed text. Locked and read-only fields remain protected.
 Existing accounts, schedules, media, keys and records are preserved. No plan is
 automatically generated, approved or activated for publishing by this update.
 See PHASE4_TEST_GUIDE.md for setup, verification and current limits.

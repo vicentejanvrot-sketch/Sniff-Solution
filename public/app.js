@@ -5,7 +5,7 @@ import {mountCalendar} from './calendar.js';
 import {elapsedLabel} from './timing.js';
 import {dailyCostsHTML,bindDailyCosts} from './reconciliation.js';
 import {mountStudio,visibleMedia} from './production.js';
-import {stopDictation} from './dictation.js';
+import {stopDictation,observeDictation} from './dictation.js';
 import {clearThumbnails,thumbnailHTML,loadThumbnails} from './thumbnails.js';
 const app=document.querySelector('#app'),modal=document.querySelector('#modal');
 let plannerProductionSelection=null;
@@ -327,6 +327,7 @@ function settings(el){
 async function init(){
  try{await refresh();render();}catch(e){app.innerHTML='<div class="card connection-error"><h1>Workspace unavailable</h1><p>'+esc(e.message)+'</p><button id="retry">Try again</button></div>';document.querySelector('#retry').onclick=init;}
 }
+observeDictation(document.body);
 await init();
 setInterval(async()=>{if(!state||document.hidden)return;try{const before=new Map(state.jobs.map(j=>[j.id,j.status]));await refresh();for(const j of state.jobs)if(before.has(j.id)&&before.get(j.id)!==j.status&&['completed','failed','interrupted','incomplete'].includes(j.status))toast(j.status==='completed'?(j.type==='brand-research'?'Brand suggestions ready: ':j.type==='production'?'Media ready: ':j.type==='plan-day'?'Plan day ready: ':'Draft ready: ')+j.title:'Request needs attention: '+j.title,j.status!=='completed');const badge=document.querySelector('#job-count');if(badge)badge.textContent=state.jobs.filter(j=>['queued','running'].includes(j.status)).length;if(['dashboard','jobs'].includes(page)&&!modal.open)renderPage();}catch{}},2500);
 

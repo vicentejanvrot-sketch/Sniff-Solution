@@ -26,7 +26,7 @@ const path=require('node:path');
   const base='http://127.0.0.1:'+app.server.address().port;
   await page.goto(base);await page.locator('nav').getByRole('button',{name:'Content Planner',exact:true}).click();
   await page.getByRole('button',{name:'+ New content plan'}).click();
-  await page.getByLabel('Plan title',{exact:true}).fill('One week of travel');await page.getByLabel('Campaign goal and context').fill('Help travellers pack and plan.');
+  await page.getByLabel('Plan title',{exact:true}).fill('One week of travel');await page.getByLabel('Campaign goal and context',{exact:true}).fill('Help travellers pack and plan.');
   const future=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
   await page.getByLabel('Posting date and time',{exact:true}).fill(future+'T14:00');await page.locator('[name=dayFormat]').selectOption('image');
   await page.getByRole('button',{name:'+ Add posting day'}).click();await page.getByLabel('Posting date and time',{exact:true}).nth(1).fill(future+'T16:00');

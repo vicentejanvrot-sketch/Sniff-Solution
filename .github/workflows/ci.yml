@@ -50,3 +50,7 @@ jobs:
         env:
           NODE_PATH: /tmp/sniff-browser/node_modules
         run: node test/phase4-browser.cjs
+      - name: Speech-to-text writing fields browser verification
+        env:
+          NODE_PATH: /tmp/sniff-browser/node_modules
+        run: node test/dictation-browser.cjs

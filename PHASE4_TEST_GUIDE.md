@@ -1,13 +1,13 @@
-# Phase 4 · v0.4.0
+# Phase 4 · v0.4.1
 
 ## Install the complete Windows update
 
-Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.0-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
+Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.1-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
 
 1. Quit Sniff Solution from its tray menu. Closing the browser leaves the old server running. Let active work finish.
 2. Extract **all** ZIP contents over the existing app folder and replace application files.
 3. Run **START_SNIFF.cmd** from that folder. It refreshes the desktop and Start menu shortcuts to that exact copy.
-4. Confirm **v0.4.0** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
+4. Confirm **v0.4.1** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
 
 The ZIP contains the launcher, app, Node.js, Python, FFmpeg and FFprobe. Real `.env`, `.data`, API keys and user files are excluded. Overwriting app files preserves desktop records/settings in `%LOCALAPPDATA%\SniffSolution` and existing checkout `.env`/`.data`. Retain the same publishing owner key, encryption key, workspace and cloud service.
 
@@ -53,3 +53,8 @@ The worker collects at most once per six hours per account automatically, with a
 Automated tests do not spend provider credits or certify a live Instagram Insights permission grant. Real-account comparison, text quality, generation quality and publication remain owner acceptance checks.
 
 References: [Meta Insights permissions](https://developers.facebook.com/documentation/instagram-platform/insights), [media metrics](https://developers.facebook.com/documentation/instagram-platform/reference/instagram-media/insights), [account metrics](https://developers.facebook.com/documentation/instagram-platform/api-reference/instagram-user/insights).
+
+
+## Speech-to-text acceptance (0.4.1)
+
+In Content Planner → New content plan, type part of a campaign goal, select **Dictate**, speak and select **Stop dictation**. Confirm speech appends to your original words. Repeat for a saved day's creative brief and caption; only that day's field may change. Check Brand Studio long-text fields, a Content Skill brief, Drafts & Review content, prepared video briefs, media review captions and Publishing Calendar captions. Read-only/locked fields must have no usable Dictate control. Speech must stop on navigation, form submission, dialog closure or field locking. Denied microphone access must leave your text intact and explain how to recover. Unsupported browsers should offer Win+H. Speech follows your browser language; language translation is not included. Test on your real microphone/browser after updating; automated browser tests use simulated recognition and never record real audio.
