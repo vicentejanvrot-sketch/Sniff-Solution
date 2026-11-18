@@ -180,3 +180,10 @@ Cloud analytics requires the additive private schema in db/phase4_insights.sql, 
 Editable long-text fields now offer the same **Dictate / Stop dictation** controls as Image Studio and Video Studio. This includes campaign goals, daily creative briefs, purposes and captions, brand voice/audience/goals/claim rules, content skill briefs, draft content, prepared video prompts, media review notes and calendar captions. Each planner day targets its own field. Spoken text appends without replacing typed content and respects field length limits. Dictation stops when you navigate, submit a form, close a dialog, or the field becomes locked. Locked and read-only fields cannot be changed by speech.
 
 Your browser handles speech recognition in its configured language and may process audio online; microphone permission is required. This transcribes speech to text without translating languages or making a Sniff AI-provider request. Unsupported browsers offer the Windows **Win+H** voice-typing fallback. No new paid service or API key is needed.
+
+
+## 0.4.2 media models and local rendering recovery
+
+Video Studio now offers six integrated Higgsfield text-to-video models: Seedance 2.0/2.5, Kling 4.0, Kling 3.0 Standard/Pro and Kling 2.6 Pro. Image Studio uses OpenAI and can load compatible GPT Image model IDs from your account. Select the model before each request; Activity records that exact choice. Settings supports a default video model. Video clips remain 5 or 10 seconds in the app. Catalog compatibility does not establish live account permissions; actual fees stay unpriced until reconciliation.
+
+Small Calibri overlays now use outline glyphs instead of unsupported monochrome bitmap glyphs. Failed jobs with saved media offer **Finish saved output** to create a separate local FFmpeg rendering job, retaining original media, paid-request history and planner links without making another AI request. Recovered finals still require review. See PHASE4_TEST_GUIDE.md for verification and limitations.

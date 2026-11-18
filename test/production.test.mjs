@@ -37,6 +37,19 @@ test('batch originals survive rendering failure and missing images produce incom
  const q=await f.request('/api/production','POST',{kind:'image',brandId:'brand',prompt:'Test',count:2});const {job,state}=await f.done(q.body.id);assert.equal(job.status,'failed');assert.equal(state.media.length,2);assert.ok(state.media.every(m=>m.role==='generated'));
  const g=await fixture(t,{fetcher:async()=>Response.json({data:[{b64_json:png.toString('base64')} ]})});const b=await g.request('/api/production','POST',{kind:'image',brandId:'brand',prompt:'Test',count:2});assert.equal((await g.done(b.body.id)).job.status,'incomplete');
 });
+
+test('failed production finishes its saved original locally, preserving history, planner links and billing',async t=>{
+ let failRender=true,calls=0;
+ const f=await fixture(t,{fetcher:async()=>{calls++;return Response.json({data:[{b64_json:png.toString('base64')}]});},mediaRenderer:async(r,p)=>{if(failRender)throw Error('Rendering failed');return fakeRenderer(r,p);}});
+ const queued=await f.request('/api/production','POST',{kind:'image',brandId:'brand',prompt:'Saved scene',caption:'Public caption',aspect:'4:5'});
+ const first=await f.done(queued.body.id);assert.equal(first.job.status,'failed');assert.equal(calls,1);const source=first.state.media[0];
+ await f.store.update(s=>{const job=s.jobs.find(j=>j.id===queued.body.id);Object.assign(job,{plannerPlanId:'plan',plannerEntryId:'day',plannerEntryVersion:3});s.settings.monthlyBudget=5;});
+ failRender=false;
+ const recovery=await f.request('/api/production/'+queued.body.id+'/render-saved','POST',{});assert.equal(recovery.status,202,JSON.stringify(recovery.body));
+ const result=await f.done(recovery.body.id);assert.equal(result.job.status,'completed');assert.equal(calls,1);assert.equal(result.job.provider,'local');assert.equal(result.job.reservation,0);assert.equal(result.job.reconciledCost,0);assert.equal(result.job.plannerEntryId,'day');assert.equal(result.job.plannerEntryVersion,3);
+ assert.equal(result.state.jobs.find(j=>j.id===queued.body.id).status,'failed');const final=result.state.media.find(m=>m.jobId===result.job.id);assert.equal(final.sourceId,source.id);assert.equal(final.caption,'Public caption');assert.equal(final.status,'needs-review');assert.equal(result.state.media.filter(m=>m.role==='generated').length,1);
+ assert.equal((await f.request('/api/production/'+queued.body.id+'/render-saved','POST',{})).status,409);assert.equal(calls,1);
+});
 test('one requested image makes one provider call and shows one final choice, with original recoverable',async t=>{
  let calls=0;const f=await fixture(t,{fetcher:async(_url,opts)=>{calls++;assert.equal(JSON.parse(opts.body).n,1);return Response.json({data:[{b64_json:png.toString('base64')}]});}});
  const q=await f.request('/api/production','POST',{kind:'image',brandId:'brand',prompt:'One scene',count:1});const {state}=await f.done(q.body.id);assert.equal(calls,1);assert.equal(state.media.length,2);assert.equal(visibleMedia(state.media).length,1);assert.equal(visibleMedia(state.media,true).length,2);assert.equal(visibleMedia(state.media)[0].role,'rendered');

@@ -37,3 +37,15 @@ test('a real installed Windows font outside the old whitelist renders without an
  const result=await renderAsset({bytes:await readFile(source),mime:'image/png'},input,{env,dir,fontCatalog:fonts,readMedia:async()=>{throw new Error('No font upload should be read');}});assert.deepEqual([result.bytes.readUInt32BE(16),result.bytes.readUInt32BE(20)],[1080,1080]);
  const legacy={...input,systemFontId:'',brandSnapshot:{...input.brandSnapshot,font:font.name}};const recovered=await renderAsset({bytes:await readFile(source),mime:'image/png'},legacy,{env,dir,fontCatalog:fonts});assert.equal(recovered.mime,'image/png','Existing queued jobs should also resolve installed brand fonts');
 });
+
+test('Calibri small branded video text uses outline glyphs instead of unsupported monochrome bitmaps',async t=>{
+ if(process.platform!=='win32'){t.skip('Windows Calibri regression.');return;}
+ const fonts=await installedFonts(),font=fonts.find(f=>f.name==='Calibri');if(!font){t.skip('Calibri is not installed; font files are never bundled.');return;}
+ const env={FFMPEG:process.env.FFMPEG||'ffmpeg'};if(!await rendererAvailable(env)){t.skip('FFmpeg unavailable.');return;}
+ const dir=await mkdtemp(path.join(tmpdir(),'sniff-calibri-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const source=path.join(dir,'source.mp4'),logo=path.join(dir,'logo.png');
+ execFileSync(env.FFMPEG,['-loglevel','error','-f','lavfi','-i','color=c=blue:s=180x320:d=0.2','-c:v','libx264','-pix_fmt','yuv420p',source],{windowsHide:true});
+ execFileSync(env.FFMPEG,['-loglevel','error','-f','lavfi','-i','color=c=green:s=80x80','-frames:v','1','-threads','1',logo],{windowsHide:true});
+ const p={aspect:'9:16',fit:'contain',color:'#163D30',branding:true,includeBrandText:true,systemFontId:font.id,brandSnapshot:{name:'Test',font:'Calibri'},overlay:'A small branded caption for a synthetic Calibri regression. '.padEnd(80,'x'),logoSnapshot:{id:'logo'}};
+ const rendered=await renderAsset({bytes:await readFile(source),mime:'video/mp4'},p,{env,dir,fontCatalog:fonts,readMedia:async()=>readFile(logo)});assert.equal(rendered.mime,'video/mp4');assert.ok(rendered.bytes.includes(Buffer.from('ftyp')));assert.equal(rendered.width,1080);
+});

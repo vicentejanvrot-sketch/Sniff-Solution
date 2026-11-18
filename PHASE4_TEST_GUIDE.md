@@ -1,13 +1,13 @@
-# Phase 4 · v0.4.1
+# Phase 4 · v0.4.2
 
 ## Install the complete Windows update
 
-Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.1-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
+Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.2-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
 
 1. Quit Sniff Solution from its tray menu. Closing the browser leaves the old server running. Let active work finish.
 2. Extract **all** ZIP contents over the existing app folder and replace application files.
 3. Run **START_SNIFF.cmd** from that folder. It refreshes the desktop and Start menu shortcuts to that exact copy.
-4. Confirm **v0.4.1** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
+4. Confirm **v0.4.2** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
 
 The ZIP contains the launcher, app, Node.js, Python, FFmpeg and FFprobe. Real `.env`, `.data`, API keys and user files are excluded. Overwriting app files preserves desktop records/settings in `%LOCALAPPDATA%\SniffSolution` and existing checkout `.env`/`.data`. Retain the same publishing owner key, encryption key, workspace and cloud service.
 
@@ -58,3 +58,14 @@ References: [Meta Insights permissions](https://developers.facebook.com/document
 ## Speech-to-text acceptance (0.4.1)
 
 In Content Planner → New content plan, type part of a campaign goal, select **Dictate**, speak and select **Stop dictation**. Confirm speech appends to your original words. Repeat for a saved day's creative brief and caption; only that day's field may change. Check Brand Studio long-text fields, a Content Skill brief, Drafts & Review content, prepared video briefs, media review captions and Publishing Calendar captions. Read-only/locked fields must have no usable Dictate control. Speech must stop on navigation, form submission, dialog closure or field locking. Denied microphone access must leave your text intact and explain how to recover. Unsupported browsers should offer Win+H. Speech follows your browser language; language translation is not included. Test on your real microphone/browser after updating; automated browser tests use simulated recognition and never record real audio.
+
+
+## Model choice and saved-output recovery (0.4.2)
+
+- In Video Studio, choose **Generation model** before Start production. The integrated Higgsfield production adapters are Seedance 2.0, Seedance 2.5, Kling 4.0, Kling 3.0 Standard, Kling 3.0 Pro and Kling 2.6 Pro. All app adapters currently expose reviewed 5/10-second clips in 1:1, 9:16 or 16:9. Native provider capabilities may be wider. The model details show requested resolution and audio behavior; Kling 3.0/2.6 use their native defaults. Access and actual charges depend on your API account. This is a documented compatibility list, not live account entitlement verification or the entire Higgsfield website catalog.
+- In Image Studio, the provider is OpenAI. **Load models from OpenAI** reads the account's /v1/models catalog and filters GPT Image IDs. Select the desired model before production. The previously configured model remains selectable if discovery fails or omits it. Listing a model does not guarantee permissions for every operation. No Higgsfield image adapter was added. Discovery makes no generation request.
+- Both choices are saved in each Activity request. Settings retains the default image model and lets you select a default supported video model. Verify the correct provider/model in Activity after submitting a test; automated adapter tests use mocked services, not billed live generations.
+- Calibri includes bitmap glyphs at some small sizes. FFmpeg now requests outline glyphs explicitly, fixing the reproduced branded-video failure without changing the font, overlay text, original video or other brand options. Real Calibri regression runs where that Windows font and FFmpeg are present; user fonts are never packaged.
+- For a failed/interrupted rendering job with a saved original, choose **Activity → Finish saved output**. It queues one unfinished original at a time as a new **local / FFmpeg** job with zero reservation/provider cost. Existing paid billing records, request IDs and originals remain intact; no new provider request is made. Review and approve the new final output. Planner links are carried forward under their original version. Active duplicates and already finished originals are rejected. If a batch has multiple unfinished originals, repeat after each local render completes.
+
+Model schemas verified against the [Higgsfield production catalog](https://open.higgsfield.ai/explore/video) and each integrated model's API reference on 2026-11-18; account model discovery follows the [OpenAI model-list endpoint](https://developers.openai.com/api/reference/resources/models/methods/list). Actual provider acceptance, output quality and billing remain real-account checks.

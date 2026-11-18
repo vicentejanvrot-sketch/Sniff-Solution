@@ -1,3 +1,4 @@
+import {videoModels,videoModel,imageModel,accountImageModels} from './lib/media-models.mjs';
 import {analyticsReport,analyticsCSV} from './lib/analytics.mjs';
 import {createPlan,findEntry,ensureEntryEditable,saveEntry,plannerPrompt,parsePlanOutput,plannerProduction} from './lib/planner.mjs';
 import {desktopPublishing} from './lib/desktop-publishing.mjs';
@@ -37,6 +38,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
  const thumbnailJobs=new Map();let thumbnailTail=Promise.resolve();
  const renderReady=await rendererAvailable(env);
  let fontCatalog=await fontCatalogProvider();
+ let imageCatalog=null;
  let working=false,closing=false;
  await store.update(s=>{for(const j of s.jobs)if(j.status==='running'){j.status='interrupted';j.error='Server stopped during this request. Check provider billing before explicitly running again.';j.finishedAt=now();}});
  async function mediaRequest(method,file){
@@ -134,7 +136,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    }
   }finally{working=false;}
  }
- function publicState(){const s=store.read();return {...s,skills,production:{fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!higgsfieldCredential(env),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 4 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
+ function publicState(){const s=store.read();return {...s,skills,production:{videoModels,fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!higgsfieldCredential(env),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 4 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
  const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Cache-Control','no-store');
@@ -304,10 +306,32 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       Object.assign(record,{plannerPlanId:plan.id,plannerEntryId:entry.id,plannerEntryVersion:entry.version});(s.schedules??=[]).unshift(record);audit(s,'schedule.created',record.id);return record;
      });return json(res,item,201);
     }
+    if(p==='/api/media-models'&&req.method==='GET'){
+     if(!imageCatalog||imageCatalog.expires<Date.now())imageCatalog={ids:await accountImageModels({env,fetcher}),expires:Date.now()+300000};
+     return json(res,{provider:'openai',models:imageCatalog.ids,checkedAt:new Date(imageCatalog.expires-300000).toISOString(),note:'Account catalog, filtered to GPT Image models compatible with this adapter. Model listing does not guarantee generation permissions.'});
+    }
+    if(/^\/api\/production\/[^/]+\/render-saved$/.test(p)&&req.method==='POST'){
+     const jobId=p.split('/')[3];
+     const job=await store.update(s=>{
+      const original=s.jobs.find(j=>j.id===jobId&&j.type==='production');
+      if(!original||!['failed','interrupted','incomplete'].includes(original.status))fail('Choose a finished request with saved media that needs rendering.',409);
+      if(s.jobs.some(j=>j.renderOfJobId===jobId&&['queued','running'].includes(j.status)))fail('A saved-output render is already in progress.',409);
+      const candidates=original.production.kind==='render'?[s.media.find(m=>m.id===original.production.sourceId)]:s.media.filter(m=>(original.mediaIds||[]).includes(m.id)&&m.role==='generated'&&m.brandId===original.brandId);
+      const source=candidates.filter(Boolean).find(m=>!s.media.some(final=>final.sourceId===m.id&&final.role==='rendered'&&(final.jobId===jobId||s.jobs.some(j=>j.id===final.jobId&&j.renderOfJobId===jobId))));
+      if(!source)fail('No unfinished saved original remains. Review the existing assets.',409);
+      if(!renderReady&&mediaRenderer===renderAsset)fail('The local renderer is unavailable.',409);
+      if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('Queue is full. Wait for an active request.',409);
+      const production={...structuredClone(original.production),kind:'render',count:1,sourceId:source.id,sourceSnapshot:structuredClone(source)};
+      const j={id:id(),type:'production',skill:'render-studio',brandId:original.brandId,title:original.title,renderOfJobId:jobId,plannerPlanId:original.plannerPlanId,plannerEntryId:original.plannerEntryId,plannerEntryVersion:original.plannerEntryVersion,production,provider:'local',config:{model:'FFmpeg'},status:'queued',phase:'Finishing saved output locally; no AI generation',reservation:0,costEstimate:0,reconciledCost:0,createdAt:now(),mediaIds:[]};
+      s.jobs.push(j);audit(s,'production.render_saved',j.id);return j;
+     });json(res,{id:job.id,status:'queued'},202);setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
+    }
     if(p==='/api/production'&&req.method==='POST'){
      const b=await jsonBody(req);
      const job=await store.update(s=>{
       const plannerLink=plannerProduction(s,b),production=productionInput(b,s,fontCatalog),config=productionSettings(s.settings.production);
+      if(production.kind==='image')config.imageModel=imageModel(b.imageModel||config.imageModel);
+      if(production.kind==='video')config.videoModel=videoModel(b.videoModel||config.videoModel).id;
       if(!renderReady&&mediaRenderer===renderAsset)fail('FFmpeg is not configured. Use the complete Windows app or configure FFMPEG locally.',409);
       if(production.kind==='image'&&(!env.OPENAI_API_KEY||!config.imageModel))fail('Configure OPENAI_API_KEY locally and an image model in Settings.',409);
       if(production.kind==='video'&&!higgsfieldCredential(env))fail('Add HF_API_KEY (the complete copied Higgsfield API key) to your local API settings, then restart.',409);
