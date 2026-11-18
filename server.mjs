@@ -1,4 +1,5 @@
 import {desktopPublishing} from './lib/desktop-publishing.mjs';
+import {validateSchedule,cancelSchedule,ensureNotScheduled} from './lib/calendar.mjs';
 import {videoBriefPrompt} from './lib/video-brief.mjs';
 import http from 'node:http';
 import {spawn} from 'node:child_process';
@@ -148,6 +149,34 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      const b=await jsonBody(req);if(!store.read().brands.some(x=>x.id===b.brandId))fail('Brand not found.',404);
      return json(res,await publishing.disconnect(b.accountId,b.brandId));
     }
+    if(p==='/api/schedules'&&req.method==='GET')return json(res,store.read().schedules||[]);
+    if(p==='/api/schedules'&&req.method==='POST'){
+     const b=await jsonBody(req);
+     const accounts=(await publishing.accounts()).accounts;
+     const result=await store.update(s=>{
+      const item=validateSchedule(s,b,{accounts});
+      (s.schedules??=[]).unshift(item);audit(s,'schedule.created',item.id);return item;
+     });
+     return json(res,result,201);
+    }
+    if(/^\/api\/schedules\/[^/]+$/.test(p)&&req.method==='PUT'){
+     const b=await jsonBody(req),scheduleId=p.split('/')[3];
+     const accounts=(await publishing.accounts()).accounts;
+     const result=await store.update(s=>{
+      const current=(s.schedules||[]).find(x=>x.id===scheduleId);
+      if(!current)fail('Schedule not found.',404);
+      if(b.version!==current.version)fail('Schedule changed. Reload before editing.',409);
+      if(b.brandId!==current.brandId)fail('Cannot transfer a publication to another brand.',409);
+      const updated=validateSchedule(s,b,{accounts,existing:current});
+      Object.assign(current,updated);audit(s,'schedule.updated',current.id);return current;
+     });
+     return json(res,result);
+    }
+    if(/^\/api\/schedules\/[^/]+\/cancel$/.test(p)&&req.method==='POST'){
+     const b=await jsonBody(req),scheduleId=p.split('/')[3];
+     const result=await store.update(s=>{const entry=cancelSchedule(s,scheduleId,b.version);audit(s,'schedule.cancelled',entry.id);return entry;});
+     return json(res,result);
+    }
     if(p==='/api/fonts/refresh'&&req.method==='POST'){fontCatalog=await fontCatalogProvider({refresh:true});return json(res,publicFonts(fontCatalog));}
     if(p==='/api/production'&&req.method==='POST'){
      const b=await jsonBody(req);
@@ -205,7 +234,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      const brandId=p.split('/').pop();
      await store.update(s=>{
       if(!s.brands.some(b=>b.id===brandId))fail('Brand not found.',404);
-      if(s.drafts.some(d=>d.brandId===brandId)||s.media.some(m=>m.brandId===brandId)||s.jobs.some(j=>j.brandId===brandId))fail('This brand has content, media or job history. Keep it to preserve those records.',409);
+      if(s.drafts.some(d=>d.brandId===brandId)||s.media.some(m=>m.brandId===brandId)||s.jobs.some(j=>j.brandId===brandId)||(s.schedules||[]).some(x=>x.brandId===brandId))fail('This brand has content, media or job history. Keep it to preserve those records.',409);
       s.brands=s.brands.filter(b=>b.id!==brandId);audit(s,'brand.deleted',brandId);
      });return json(res,{ok:true});
     }
@@ -279,6 +308,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      const b=await jsonBody(req);
      const result=await store.update(s=>{
       const d=s.drafts.find(d=>d.id===p.split('/')[3]);if(!d)fail('Draft not found.',404);
+      ensureNotScheduled(s,{draftId:d.id});
       if(b.version!==d.version)fail('This draft changed. Reload before saving.',409);
       if(!['draft','needs-review','approved'].includes(b.status))fail('Invalid review status.');
       const text=str(b.text,30000),title=str(b.title,150);if(!title||!text)fail('Title and content are required.');
@@ -288,7 +318,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      });return json(res,result);
     }
     if(/^\/api\/drafts\/[^/]+$/.test(p)&&req.method==='DELETE'){
-     await store.update(s=>{const draftId=p.split('/')[3];if(!s.drafts.some(d=>d.id===draftId))fail('Draft not found.',404);s.drafts=s.drafts.filter(d=>d.id!==draftId);audit(s,'draft.deleted',draftId);});
+     await store.update(s=>{const draftId=p.split('/')[3];if(!s.drafts.some(d=>d.id===draftId))fail('Draft not found.',404);ensureNotScheduled(s,{draftId});s.drafts=s.drafts.filter(d=>d.id!==draftId);audit(s,'draft.deleted',draftId);});
      return json(res,{ok:true});
     }
     if(p==='/api/media'&&req.method==='POST'){
@@ -321,14 +351,14 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      const m=store.read().media.find(m=>m.id===p.split('/')[3]);if(!m)fail('Media not found.',404);
      if(req.method==='PUT'){
       const b=await jsonBody(req);if(!['draft','needs-review','approved'].includes(b.status))fail('Choose a review status.');
-      const result=await store.update(s=>{const asset=s.media.find(x=>x.id===m.id);if((asset.version||1)!==b.version)fail('This asset changed. Reload before saving.',409);const history=asset.reviewHistory||=[];history.unshift({version:asset.version||1,status:asset.status||'needs-review',caption:asset.caption||'',at:now()});asset.reviewHistory=history.slice(0,25);asset.status=b.status;asset.caption=str(b.caption||'',30000);asset.version=(asset.version||1)+1;asset.updatedAt=now();audit(s,'media.'+b.status,asset.id);return asset;});return json(res,result);
+      const result=await store.update(s=>{const asset=s.media.find(x=>x.id===m.id);ensureNotScheduled(s,{mediaId:m.id});if((asset.version||1)!==b.version)fail('This asset changed. Reload before saving.',409);const history=asset.reviewHistory||=[];history.unshift({version:asset.version||1,status:asset.status||'needs-review',caption:asset.caption||'',at:now()});asset.reviewHistory=history.slice(0,25);asset.status=b.status;asset.caption=str(b.caption||'',30000);asset.version=(asset.version||1)+1;asset.updatedAt=now();audit(s,'media.'+b.status,asset.id);return asset;});return json(res,result);
      }
      if(req.method==='GET'){
       const bytes=store.mode==='local'?await readFile(path.join(uploads,m.file)):Buffer.from(await(await mediaRequest('GET',m.file)).arrayBuffer());
       res.writeHead(200,{'Content-Type':m.mime,'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(m.name)});res.end(bytes);return;
      }
      if(req.method==='DELETE'){
-      const snapshot=store.read();if(snapshot.jobs.some(j=>['queued','running'].includes(j.status)&&j.production&&[j.production.sourceId,j.production.logoId,j.production.fontId].includes(m.id)))fail('This asset is being used by an active media job.',409);
+      const snapshot=store.read();ensureNotScheduled(snapshot,{mediaId:m.id});if(snapshot.jobs.some(j=>['queued','running'].includes(j.status)&&j.production&&[j.production.sourceId,j.production.logoId,j.production.fontId].includes(m.id)))fail('This asset is being used by an active media job.',409);
       if(snapshot.media.some(x=>x.sourceId===m.id))fail('This asset has derived versions. Delete those versions first to preserve their source history.',409);
       // Remove the stored file first; failed metadata write remains visible and recoverable.
       await removeMedia(m.file);
@@ -341,6 +371,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    }
    if(!['GET','HEAD'].includes(req.method))fail('Method not allowed.',405);
    const staticFiles={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+   staticFiles['/calendar.js']=['calendar.js','text/javascript; charset=utf-8'];
    staticFiles['/social.js']=['social.js','text/javascript; charset=utf-8'];
    staticFiles['/production.js']=['production.js','text/javascript; charset=utf-8'];
    staticFiles['/dictation.js']=['dictation.js','text/javascript; charset=utf-8'];
