@@ -62,3 +62,28 @@ test('protected authorization flow saves encrypted token and rejects replay',asy
  const wrongState=new URL((await wrong.json()).loginUrl).searchParams.get('state');
  assert.equal((await fetch(base+'/auth/meta/callback?code=mock&state='+wrongState)).status,400);assert.equal(saved.length,1);
 });
+
+import {desktopPublishing} from '../lib/desktop-publishing.mjs';
+import {createSocialRepository} from '../lib/social-repository.mjs';
+test('desktop bridge keeps owner credential server-side and validates login origin',async()=>{
+ const key='a'.repeat(44);
+ const bridge=desktopPublishing({env:{PUBLISHING_OWNER_KEY:key},fetcher:async(url,options)=>{
+  assert.equal(url,'https://sniff-publishing.onrender.com/auth/meta/start');
+  assert.equal(options.headers.Authorization,'Bearer '+key);
+  assert.deepEqual(JSON.parse(options.body),{brandId:'travel',expectedUsername:'travelonepro'});
+  return Response.json({loginUrl:'https://www.facebook.com/dialog/oauth?state=mock'});
+ }});
+ assert.deepEqual(await bridge.connect('travel','travelonepro'),{loginUrl:'https://www.facebook.com/dialog/oauth?state=mock'});
+ const invalid=desktopPublishing({env:{PUBLISHING_OWNER_KEY:key},fetcher:async()=>Response.json({loginUrl:'https://example.com/dialog/oauth'})});
+ await assert.rejects(invalid.connect('travel','travelonepro'),/Invalid authorization URL/);
+});
+test('social repository lists only metadata and scopes disconnect to workspace and brand',async()=>{
+ const calls=[];
+ const repository=createSocialRepository({url:'https://example.supabase.co',key:'mock-secret',fetcher:async(url,opts)=>{calls.push({url,opts});return Response.json([{id:'123'}]);}});
+ await repository.list('developer');
+ assert.equal(calls[0].url.searchParams.get('workspace_id'),'eq.developer');
+ assert.ok(!calls[0].url.searchParams.get('select').includes('token_ciphertext'));
+ await repository.disconnect('developer','travel','12345678-1234-1234-1234-123456789012');
+ assert.equal(calls[1].url.searchParams.get('brand_id'),'eq.travel');
+ assert.equal(JSON.parse(calls[1].opts.body).token_ciphertext,null);
+});
