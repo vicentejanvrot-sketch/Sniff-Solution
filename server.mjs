@@ -1,5 +1,6 @@
 import {videoModels,videoModel,imageModel,accountImageModels} from './lib/media-models.mjs';
 import {compatibleOutput} from './public/planner-media.js';
+import {watchlist,researchPrompt as growthResearchPrompt,replyPrompt,ensureResearch} from './lib/growth.mjs';
 import {analyticsReport,analyticsCSV} from './lib/analytics.mjs';
 import {createPlan,findEntry,ensureEntryEditable,saveEntry,plannerPrompt,parsePlanOutput,plannerProduction} from './lib/planner.mjs';
 import {desktopPublishing} from './lib/desktop-publishing.mjs';
@@ -129,6 +130,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       if(!result.text.trim()) {j.status='failed';j.error='Provider returned no text. Check usage before retrying.';return;}
       const draft={id:id(),brandId:j.brandId,title:j.title,skill:j.skill,text:result.text,status:'draft',createdAt:now(),updatedAt:now(),version:1,versions:[],sources:result.sources,checks:quality(result.text,j.brandSnapshot)};
       if(j.videoBrief){draft.videoBrief=structuredClone(j.videoBrief);if(result.text.length>16000){j.status='failed';j.error='Prepared brief is too long. No video was generated.';return;}}
+      if(j.growth){draft.growth=structuredClone(j.growth);draft.status='needs-review';}
       const missingSources=skills.find(s=>s.id===j.skill)?.requiresWeb&&!result.sources.length;
       if(result.incomplete||missingSources){draft.status='needs-review';j.status='incomplete';j.error=result.incomplete?'Provider reached its output limit. Partial draft saved for review.':'No web search sources were returned. Draft saved for review; do not treat it as verified current research.';}else j.status='completed';
       j.draftId=draft.id;s.drafts.unshift(draft);audit(s,'content.generated',draft.id);
@@ -166,6 +168,15 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
   }
  }
  function publicState(){const s=store.read();return {...s,skills,production:{videoModels,fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!higgsfieldCredential(env),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 4 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
+ async function growthAccount(accountId,brandId){const result=await publishing.accounts();const a=result.accounts.find(a=>a.id===accountId&&a.status==='connected'&&(!brandId||a.brand_id===brandId)&&store.read().brands.some(b=>b.id===a.brand_id));if(!a)fail('Choose a connected account of this brand.',409);return a;}
+ async function queueGrowth(b,growth,prompt,title){
+  if(!['openai','anthropic'].includes(b.provider)||!ready[b.provider])fail('Configure an OpenAI or Claude text model and key in Settings.',409);
+  const job=await store.update(s=>{const brand=s.brands.find(x=>x.id===b.brandId);if(!brand)fail('Choose a brand.');const config=s.settings.providers[b.provider];if(!config?.model)fail('Choose a model in Settings.',409);
+   if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('The queue is full.',409);
+   if(ledger(s).committed+s.settings.reservePerJob>s.settings.monthlyBudget)fail('The monthly budget has no room for another text request.',409);
+   const j={id:id(),brandId:brand.id,brandSnapshot:brand,title,skill:growth.kind==='research'?'research-analysis':'inbox-reply',growth,provider:b.provider,config:structuredClone(config),prompt,status:'queued',reservation:s.settings.reservePerJob,costEstimate:null,createdAt:now()};s.jobs.push(j);audit(s,'job.queued',j.id);return j;});
+  setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return {id:job.id,status:'queued'};
+ }
  const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Cache-Control','no-store');
@@ -183,6 +194,41 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
     if(p==='/api/state'&&req.method==='GET')return json(res,publicState());
     if(p.startsWith('/api/sniff')||p.startsWith('/api/integration'))fail('This module is not enabled in Phase 1.',403);
     if(!enabled.has('marketing'))fail('AI Marketing Studio is not enabled.',403);
+    if(p==='/api/research/settings'&&req.method==='POST'){
+     const b=await jsonBody(req);const result=await store.update(s=>{const w=watchlist(s,b);s.researchWatchlists=[...(s.researchWatchlists||[]).filter(x=>x.brandId!==w.brandId),w];audit(s,'research.watchlist_saved',w.brandId);return w;});return json(res,result);
+    }
+    if(p==='/api/research/collect'&&req.method==='POST'){
+     const b=await jsonBody(req),a=await growthAccount(b.accountId,b.brandId),s=store.read(),w=(s.researchWatchlists||[]).find(x=>x.brandId===a.brand_id);if(!w)fail('Save research targets first.');
+     const result=await publishing.research({accountId:a.id,competitors:w.competitors,hashtags:w.hashtags});
+     if(result.brandId!==a.brand_id||result.accountId!==a.id||!Array.isArray(result.posts))fail('Research account mismatch.',409);
+     const r={...result,id:id(),notes:w.notes};await store.update(s=>{(s.researchResults??=[]).unshift(r);s.researchResults=s.researchResults.slice(0,30);audit(s,'research.collected',r.id);});return json(res,r);
+    }
+    if(p==='/api/research/analyze'&&req.method==='POST'){
+     const b=await jsonBody(req),s=store.read(),r=ensureResearch(s,b.brandId,b.researchId),brand=s.brands.find(x=>x.id===b.brandId);
+     return json(res,await queueGrowth(b,{kind:'research',researchId:r.id},growthResearchPrompt(brand,r),'Research analysis · '+brand.name),202);
+    }
+    if(p==='/api/inbox'&&req.method==='GET'){
+     const a=await growthAccount(u.searchParams.get('accountId'));return json(res,await publishing.inbox(a.id));
+    }
+    if(p==='/api/inbox/sync'&&req.method==='POST'){
+     const b=await jsonBody(req),a=await growthAccount(b.accountId);return json(res,await publishing.syncInbox(a.id));
+    }
+    if(p==='/api/inbox/draft'&&req.method==='POST'){
+     const b=await jsonBody(req),a=await growthAccount(b.accountId,b.brandId),data=await publishing.inbox(a.id),item=data.items.find(x=>x.id===b.itemId&&x.direction==='inbound');if(!item)fail('Choose an inbound message.',404);
+     const existing=data.replies.find(x=>x.item_id===item.id);if(existing&&existing.status!=='draft')fail('This reply was already sent or needs reconciliation.',409);
+     const brand=store.read().brands.find(x=>x.id===a.brand_id),context=data.items.filter(x=>x.kind===item.kind&&x.thread_id===item.thread_id).sort((a,b)=>a.received_at.localeCompare(b.received_at));
+     return json(res,await queueGrowth({...b,brandId:a.brand_id},{kind:'reply',accountId:a.id,itemId:item.id,sourceText:item.text},replyPrompt(brand,item,context),'Reply draft · '+brand.name),202);
+    }
+    if(p==='/api/inbox/handling'&&req.method==='POST'){
+     const b=await jsonBody(req),a=await growthAccount(b.accountId),data=await publishing.inbox(a.id);if(!data.items.some(x=>x.id===b.itemId&&x.direction==='inbound'))fail('Choose an inbound message.',404);if(!['open','human','done'].includes(b.status))fail('Choose a handling status.');
+     await store.update(s=>{s.inboxHandling??={};s.inboxHandling[a.id+':'+b.itemId]={brandId:a.brand_id,status:b.status,updatedAt:now()};audit(s,'inbox.handling_changed',b.itemId);});return json(res,{ok:true});
+    }
+    if(p==='/api/inbox/reply'&&req.method==='POST'){
+     const b=await jsonBody(req);await growthAccount(b.accountId);return json(res,await publishing.saveReply({accountId:b.accountId,itemId:b.itemId,text:b.text,approved:b.approved,version:b.version}));
+    }
+    if(p==='/api/inbox/send'&&req.method==='POST'){
+     const b=await jsonBody(req);await growthAccount(b.accountId);if(b.confirm!==true)fail('Confirm this exact approved reply before sending.');const result=await publishing.sendReply({accountId:b.accountId,itemId:b.itemId,version:b.version});await store.update(s=>audit(s,'inbox.reply_sent',b.itemId));return json(res,result);
+    }
     if(p==='/api/analytics'&&req.method==='GET'){
      const filters=Object.fromEntries(['brandId','accountId','from','to'].map(key=>[key,u.searchParams.get(key)||'']));
      for(const k of ['from','to'])if(filters[k]&&!/^\d{4}-\d{2}-\d{2}$/.test(filters[k]))fail('Use valid UTC date filters.');
@@ -546,6 +592,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    staticFiles['/planner.js']=['planner.js','text/javascript; charset=utf-8'];
    staticFiles['/planner-media.js']=['planner-media.js','text/javascript; charset=utf-8'];
    staticFiles['/analytics.js']=['analytics.js','text/javascript; charset=utf-8'];
+   staticFiles['/growth.js']=['growth.js','text/javascript; charset=utf-8'];
    staticFiles['/video-brief.js']=['video-brief.js','text/javascript; charset=utf-8'];
    staticFiles['/reconciliation.js']=['reconciliation.js','text/javascript; charset=utf-8'];
    const entry=staticFiles[p];if(!entry)fail('Not found.',404);

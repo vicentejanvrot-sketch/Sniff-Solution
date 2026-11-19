@@ -199,3 +199,8 @@ Content Planner now combines scheduling and cloud activation in **Schedule & act
 ## 0.4.4 retain approved outputs when posting times change
 
 Date/time edits no longer hide compatible generated media from the planner. Earlier production versions are matched against retained creative-copy history and production snapshots, with the same checks in the browser and scheduling API. Files and approvals are preserved. Actual creative changes still reject incompatible outputs. Failed rendering jobs with a saved original now offer Finish saved output inside the planner; local recovery requires no new AI generation, and its final output still needs media approval.
+
+
+## 0.4.6 content research and reviewed replies
+
+Content Research saves brand-specific competitor usernames and industry hashtags, collects public samples through the existing Meta connection, compares observed interactions, queues separate paid AI analysis and carries selected evidence into a new content plan. Comments & messages collects recent comments and DMs into a private backend inbox, shows conversation context, drafts replies with the configured AI provider, and requires exact-text approval plus a deliberate Send action. Human follow-up/handled flags are saved locally. Signed webhooks can capture new incoming events after Meta setup. No automatic replies, cold DMs or third-party video watching are enabled. Research and recent inbox collection are on demand with account cooldowns. Meta access/App Review may limit availability. See [RESEARCH_INBOX_GUIDE.md](RESEARCH_INBOX_GUIDE.md) for setup, acceptance and limits.

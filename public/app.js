@@ -1,5 +1,6 @@
 import {mountPlanner} from './planner.js';
 import {mountAnalytics} from './analytics.js';
+import {mountGrowth} from './growth.js';
 import {mountSocial} from './social.js';
 import {mountCalendar} from './calendar.js';
 import {elapsedLabel} from './timing.js';
@@ -9,6 +10,7 @@ import {stopDictation,observeDictation} from './dictation.js';
 import {clearThumbnails,thumbnailHTML,loadThumbnails} from './thumbnails.js';
 const app=document.querySelector('#app'),modal=document.querySelector('#modal');
 let plannerProductionSelection=null;
+let plannerResearchSelection=null;
 let state,page='dashboard',activeBrand=localStorage.getItem('sniff-brand')||'',activeSkill='',activeDraft='',toastTimer;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>v==null?'Unpriced':'US$'+Number(v).toFixed(4);
@@ -29,7 +31,7 @@ function heading(title,description,action=''){return '<div class="heading"><div>
 function empty(title,text,button=''){return '<div class="empty"><h3>'+esc(title)+'</h3><p>'+esc(text)+'</p>'+button+'</div>';}
 function brandOptions(){return '<option value="">Choose a brand</option>'+state.brands.map(b=>'<option value="'+b.id+'" '+(b.id===activeBrand?'selected':'')+'>'+esc(b.name)+'</option>').join('');}
 function render(){
- const nav=[['dashboard','Workspace'],['brands','Brand Studio'],['planner','Content Planner'],['analytics','Performance'],['skills','Content Skills'],['images','Image Studio'],['video','Video Studio'],['drafts','Drafts & Review'],['media','Media Library'],['social','Social Accounts'],['calendar','Publishing Calendar'],['jobs','Activity'],['settings','Settings & Costs']];
+ const nav=[['dashboard','Workspace'],['brands','Brand Studio'],['planner','Content Planner'],['analytics','Performance'],['research','Content Research'],['inbox','Comments & messages'],['skills','Content Skills'],['images','Image Studio'],['video','Video Studio'],['drafts','Drafts & Review'],['media','Media Library'],['social','Social Accounts'],['calendar','Publishing Calendar'],['jobs','Activity'],['settings','Settings & Costs']];
  app.innerHTML='<div class="layout"><aside><div class="logo"><span class="mark">S</span><div><strong>Sniff Solution</strong><small>YOUR GROWTH WORKSPACE</small></div></div><nav aria-label="Main navigation">'+nav.map(([id,label])=>'<button data-page="'+id+'" class="'+(page===id?'active':'')+'" '+(page===id?'aria-current="page"':'')+'>'+label+(id==='jobs'?'<span id="job-count">'+state.jobs.filter(j=>['queued','running'].includes(j.status)).length+'</span>':'')+'</button>').join('')+'</nav><div class="side-note">Phase 4 · v'+esc(state.appVersion||'restart required')+(state.sourceCommit?' · build '+esc(state.sourceCommit.slice(0,7)):'')+'<br>One owner. Your brands. Your ideas.<br><br>Storage: '+esc(state.storageMode)+'<br>Plan, publish and learn.</div></aside><div><header><strong>Your next good idea starts here.</strong><div class="controls"><label class="sr-only" for="brand-switch">Active brand</label><select id="brand-switch"><option value="">All brands</option>'+state.brands.map(b=>'<option value="'+b.id+'" '+(b.id===activeBrand?'selected':'')+'>'+esc(b.name)+'</option>').join('')+'</select><span class="pill" id="app-version" title="'+esc(state.build||'')+'">v'+esc(state.appVersion||'restart required')+'</span><span class="pill">Developer owner</span><span class="avatar" aria-label="Vicente Miranda">VM</span></div></header><main id="main"></main></div></div>';
  document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
  document.querySelector('#brand-switch').onchange=e=>{activeBrand=e.target.value;localStorage.setItem('sniff-brand',activeBrand);activeDraft='';renderPage();};
@@ -46,7 +48,8 @@ function renderPage(){
  if(page==='media')media(main);
  if(page==='jobs')jobs(main);
  if(page==='settings')settings(main);
- if(page==='planner')mountPlanner(main,{state,activeBrand,esc,heading,api,send,refresh,navigate,toast,preview:previewMedia,startPlanProduction:(plan,entry)=>{plannerProductionSelection={plan,entry};activeBrand=plan.brandId;navigate(entry.format==='reel'?'video':'images');}});
+ if(page==='planner'){mountPlanner(main,{state,activeBrand,esc,heading,api,send,refresh,navigate,toast,preview:previewMedia,researchSelection:plannerResearchSelection,startPlanProduction:(plan,entry)=>{plannerProductionSelection={plan,entry};activeBrand=plan.brandId;navigate(entry.format==='reel'?'video':'images');}});plannerResearchSelection=null;}
+ if(['research','inbox'].includes(page))mountGrowth(main,{mode:page,state,activeBrand,esc,heading,api,send,refresh,toast,startResearchPlan:selection=>{plannerResearchSelection=selection;activeBrand=selection.brandId;navigate('planner');}});
  if(page==='analytics')mountAnalytics(main,{state,activeBrand,esc,heading,api,send,refresh,toast});
  if(page==='calendar')mountCalendar(main,{state,activeBrand,esc,heading,api,send,refresh,toast});
  if(page==='social')mountSocial(main,{state,activeBrand,esc,heading,brandOptions,api,send,toast});
@@ -323,7 +326,7 @@ function settings(el){
  '<details><summary>Recent audit history</summary>'+state.audit.slice(0,25).map(a=>'<p class="hint">'+esc(date(a.at))+' · '+esc(a.action)+' · '+esc(a.actor)+'</p>').join('')+'</details>';
  document.querySelector('#settings-form').onsubmit=async e=>{e.preventDefault();const btn=e.submitter;btn.disabled=true;const data=Object.fromEntries(new FormData(e.target));const providers=Object.fromEntries(['openai','anthropic','perplexity'].map(p=>[p,{model:data[p+'-model'],inputRate:data[p+'-inputRate'],outputRate:data[p+'-outputRate']}]));
  try{await send('/api/settings','PUT',{monthlyBudget:data.monthlyBudget,reservePerJob:data.reservePerJob,providers,production:{imageModel:data.imageModel,videoModel:data.videoModel,reserve:data.mediaReserve}});await refresh();renderPage();toast('Settings saved.');}catch(err){toast(err.message,true);}finally{btn.disabled=false;}};
- document.querySelector('#backup').onclick=()=>{const {brands,drafts,jobs,media,audit,settings,version,reconciliations=[],schedules=[]}=state;download(new Blob([JSON.stringify({version,brands,drafts,jobs,media,audit,settings,reconciliations,schedules},null,2)],{type:'application/json'}),'sniff-workspace-backup.json');};
+ document.querySelector('#backup').onclick=()=>{const {brands,drafts,jobs,media,audit,settings,version,reconciliations=[],schedules=[],contentPlans=[],analytics={},researchWatchlists=[],researchResults=[],inboxHandling={}}=state;download(new Blob([JSON.stringify({version,brands,drafts,jobs,media,audit,settings,reconciliations,schedules,contentPlans,analytics,researchWatchlists,researchResults,inboxHandling},null,2)],{type:'application/json'}),'sniff-workspace-backup.json');};
 }
 async function init(){
  try{await refresh();render();}catch(e){app.innerHTML='<div class="card connection-error"><h1>Workspace unavailable</h1><p>'+esc(e.message)+'</p><button id="retry">Try again</button></div>';document.querySelector('#retry').onclick=init;}

@@ -1,4 +1,5 @@
 import {createInsights} from '../lib/insights.mjs';
+import {createEngagement,verifyMetaSignature} from '../lib/engagement.mjs';
 // Separate public cloud process; never imports or exposes the desktop server.
 import http from 'node:http';
 import {pathToFileURL} from 'node:url';
@@ -24,7 +25,8 @@ export function connectionConfig(env){
  const {META_APP_ID:appId,META_CONFIGURATION_ID:configurationId,META_REDIRECT_URI:redirectUri,META_APP_SECRET:appSecret,META_GRAPH_API_VERSION:apiVersion,SUPABASE_URL:url,SUPABASE_SECRET_KEY:key,PUBLISHING_TOKEN_ENCRYPTION_KEY:encryptionKey,PUBLISHING_OWNER_KEY:ownerKey}=env;
  if(!ownerKey||ownerKey.length<32||! /^[A-Za-z0-9+/]{43}=$/.test(encryptionKey||''))throw new Error('Authorization secrets are incomplete.');
  if(!/^\d+$/.test(appId)||!/^\d+$/.test(configurationId)||redirectUri!=='https://sniff-publishing.onrender.com/auth/meta/callback')throw new Error('Invalid Meta configuration.');
- return {appId,configurationId,redirectUri,encryptionKey,ownerKey,workspaceId:env.WORKSPACE_ID||'developer',
+ return {appId,configurationId,redirectUri,encryptionKey,ownerKey,appSecret,webhookVerifyToken:createHmac('sha256',appSecret).update('sniff-instagram-webhook:'+(env.WORKSPACE_ID||'developer')).digest('hex'),workspaceId:env.WORKSPACE_ID||'developer',
+ engagement:env.ENGAGEMENT_ENABLED==='true'?createEngagement({url,key,workspaceId:env.WORKSPACE_ID||'developer',encryptionKey,apiVersion}):null,
  states:createPublishingStateStore({url,key}),meta:createMetaClient({appId,appSecret,redirectUri,apiVersion}),saveAccount:createAccountWriter({url,key}),accounts:createSocialRepository({url,key}),insights:env.INSIGHTS_ENABLED==='true'?createInsights({url,key,workspaceId:env.WORKSPACE_ID||'developer',encryptionKey,apiVersion}):null,publishingEnabled:env.PUBLISHING_ENABLED==='true',publisher:createCloudPublisher({url,key,workspaceId:env.WORKSPACE_ID||'developer',encryptionKey,apiVersion})};
 }
 export function createPublishingServer({connection=null}={}){
@@ -36,6 +38,34 @@ export function createPublishingServer({connection=null}={}){
   const send=(status,data)=>{res.writeHead(status);res.end(JSON.stringify(data));};
   const url=new URL(req.url||'/','http://localhost');
   if(req.method==='GET'&&url.pathname==='/healthz')return send(200,{ok:true,service:'sniff-publishing',publishingEnabled:connection?.publishingEnabled===true});
+  if(url.pathname==='/webhooks/instagram'){
+   if(!connection?.engagement)return send(503,{error:'Engagement is disabled.'});
+   if(req.method==='GET'){
+    if(url.searchParams.get('hub.mode')!=='subscribe'||!equal(url.searchParams.get('hub.verify_token'),connection.webhookVerifyToken)||!/^\d{1,100}$/.test(url.searchParams.get('hub.challenge')||''))return send(403,{error:'Verification rejected.'});
+    res.writeHead(200,{'Content-Type':'text/plain'});return res.end(url.searchParams.get('hub.challenge'));
+   }
+   if(req.method!=='POST')return send(405,{error:'Method not allowed'});
+   let n=0;const chunks=[];for await(const c of req){n+=c.length;if(n>1000000)return send(413,{error:'Request too large'});chunks.push(c);}const raw=Buffer.concat(chunks);
+   if(!verifyMetaSignature(raw,req.headers['x-hub-signature-256'],connection.appSecret))return send(401,{error:'Signature rejected.'});
+   try{await connection.engagement.webhook(JSON.parse(raw.toString('utf8')));return send(200,{ok:true});}catch{return send(503,{error:'Event not stored. Retry delivery.'});}
+  }
+  if(url.pathname.startsWith('/api/engagement/')){
+   if(!connection)return send(503,{error:'Cloud service unavailable.'});
+   if(!equal(req.headers.authorization,'Bearer '+connection.ownerKey))return send(401,{error:'Unauthorized'});
+   if(!connection.engagement)return send(409,{error:'Enable ENGAGEMENT_ENABLED on the existing cloud service after applying db/engagement.sql.'});
+   try{
+    if(url.pathname==='/api/engagement/setup'&&req.method==='GET')return send(200,{callback:'https://sniff-publishing.onrender.com/webhooks/instagram',verifyToken:connection.webhookVerifyToken,fields:['comments','messages']});
+    if(url.pathname==='/api/engagement/inbox'&&req.method==='GET')return send(200,await connection.engagement.list(url.searchParams.get('accountId')));
+    if(req.method!=='POST')return send(405,{error:'Method not allowed'});
+    if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return send(415,{error:'JSON required'});
+    let n=0;const chunks=[];for await(const c of req){n+=c.length;if(n>24000)return send(413,{error:'Request too large'});chunks.push(c);}const b=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    if(url.pathname==='/api/engagement/research')return send(200,await connection.engagement.research(b.accountId,b));
+    if(url.pathname==='/api/engagement/sync')return send(200,await connection.engagement.syncInbox(b.accountId));
+    if(url.pathname==='/api/engagement/reply')return send(200,await connection.engagement.saveReply(b.accountId,b.itemId,b));
+    if(url.pathname==='/api/engagement/send')return send(200,await connection.engagement.sendReply(b.accountId,b.itemId,b.version));
+    return send(404,{error:'Not found'});
+   }catch(e){return send(e.status||400,{error:e.status?e.message:'Engagement request failed. Check setup and reload before retrying.'});}
+  }
   if(url.pathname==='/api/social/accounts'||url.pathname==='/api/social/disconnect'){
    if(!connection)return send(503,{error:'Instagram authorization is not activated.'});
    if(!equal(req.headers.authorization,'Bearer '+connection.ownerKey))return send(401,{error:'Unauthorized'});

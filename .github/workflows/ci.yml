@@ -58,3 +58,8 @@ jobs:
         env:
           NODE_PATH: /tmp/sniff-browser/node_modules
         run: node test/planner-publishing-browser.cjs
+
+      - name: Research and reviewed inbox browser verification
+        env:
+          NODE_PATH: /tmp/sniff-browser/node_modules
+        run: node test/growth-browser.cjs

@@ -1,13 +1,13 @@
-# Phase 4 · v0.4.5
+# Phase 4 · v0.4.6
 
 ## Install the complete Windows update
 
-Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.5-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
+Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.6-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
 
 1. Quit Sniff Solution from its tray menu. Closing the browser leaves the old server running. Let active work finish.
 2. Extract **all** ZIP contents over the existing app folder and replace application files.
 3. Run **START_SNIFF.cmd** from that folder. It refreshes the desktop and Start menu shortcuts to that exact copy.
-4. Confirm **v0.4.5** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
+4. Confirm **v0.4.6** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
 
 The ZIP contains the launcher, app, Node.js, Python, FFmpeg and FFprobe. Real `.env`, `.data`, API keys and user files are excluded. Overwriting app files preserves desktop records/settings in `%LOCALAPPDATA%\SniffSolution` and existing checkout `.env`/`.data`. Retain the same publishing owner key, encryption key, workspace and cloud service.
 
@@ -104,3 +104,7 @@ Earlier builds matched generated media only by the plan's numeric version. Savin
 - Working-title/internal-purpose edits do not alter pixels. Changes to the actual creative brief, public caption, on-screen text, aspect, duration or media format must not silently reuse incompatible outputs. Brand, plan and day ownership remain checked.
 - An approved provider original is not a finished rendered output. A failed render with its original saved offers **Finish saved output** directly in the planner. This queues local rendering, preserves the original/provider billing record and keeps the day link. Review and approve the new final output; it then appears in Approved output.
 - If a planned time has already passed, choose a future time at least two minutes ahead and save/approve the change before activation. The compatible media remains available. Existing activated schedules remain immutable through the plan editor; use the existing cancellation/editing policy.
+
+## Content research and reviewed inbox (0.4.6)
+
+See [RESEARCH_INBOX_GUIDE.md](RESEARCH_INBOX_GUIDE.md) for competitor/hashtag collection, bounded AI analysis, new-plan handoff, comments/DM collection, exact reply approval/send, human follow-up, Meta permissions and signed webhook setup.

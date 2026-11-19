@@ -1,0 +1,47 @@
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const {mkdtemp,rm,mkdir}=require('node:fs/promises');
+const {tmpdir}=require('node:os');
+const path=require('node:path');
+(async()=>{
+ const {createApp}=await import('../server.mjs');const dir=await mkdtemp(path.join(tmpdir(),'sniff-growth-ui-'));
+ const account={id:'00000000-0000-4000-8000-000000000001',brand_id:'brand',instagram_user_id:'123',username:'travelqa',status:'connected'};
+ const item={id:'dm:message',kind:'dm',source_id:'message',thread_id:'thread',peer_id:'456',username:'customer',text:'Can you help me plan a trip?',direction:'inbound',received_at:new Date().toISOString()};
+ const research={accountId:account.id,brandId:'brand',capturedAt:new Date().toISOString(),targets:{competitors:['travelqa'],hashtags:['travelplanning']},definition:'Public sample, observational only.',warnings:[],posts:[{id:'post',source:'@travelqa',caption:'Pack light. Save this idea.',format:'reel',permalink:'https://www.instagram.com/reel/example/',likes:12,comments:2,views:0,publishedAt:new Date().toISOString(),relativeInteractions:2}]};
+ let reply=null,sends=0,paid=0,collects=0,failSave=false;
+ const app=await createApp({dir,env:{OPENAI_API_KEY:'mock',PUBLISHING_OWNER_KEY:'x'.repeat(44)},fontCatalogProvider:async()=>[],fetcher:async(target,opts)=>{
+  const u=new URL(target);
+  if(u.pathname==='/api/social/accounts')return Response.json({accounts:[account]});
+  if(u.pathname==='/api/engagement/research'){collects++;return Response.json(research);}
+  if(u.pathname==='/api/engagement/inbox')return Response.json({items:[item],replies:reply?[reply]:[],sync:[]});
+  if(u.pathname==='/api/engagement/sync')return Response.json({comments:0,messages:1,warnings:[]});
+  if(u.pathname==='/api/engagement/reply'){if(failSave){failSave=false;return Response.json({error:'Simulated connection failure'},{status:503});}const b=JSON.parse(opts.body);reply={...b,item_id:b.itemId,status:'draft',version:b.version+1};return Response.json(reply);}
+  if(u.pathname==='/api/engagement/send'){const b=JSON.parse(opts.body);assert.equal(b.version,reply.version);assert.equal(reply.approved,true);sends++;reply.status='sent';return Response.json(reply);}
+  if(u.pathname==='/v1/responses'){paid++;const b=JSON.parse(opts.body),isReply=b.instructions.includes('Draft ONE');assert.ok(!b.input.includes('private-token'));return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:isReply?'Which destination and dates are you considering?':'Observed caption hook: packing light. Hypothesis: practical tips may encourage saves. Test an original holiday packing Reel.'}]}]});}
+  throw Error('Unexpected network '+u);
+ }});
+ await app.store.update(s=>{s.brands=[{id:'brand',name:'Travel QA',font:'Arial',palette:''},{id:'other',name:'Other brand'}];s.settings.providers.openai.model='test';});
+ await new Promise(r=>app.server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.server.address().port,browser=await chromium.launch({headless:true,executablePath:process.env.SNIFF_TEST_BROWSER||undefined});
+ async function done(){for(let i=0;i<100&&app.store.read().jobs.some(j=>['queued','running'].includes(j.status));i++)await new Promise(r=>setTimeout(r,25));assert.ok(app.store.read().jobs.every(j=>j.status==='completed'));}
+ try{
+  const page=await browser.newPage({viewport:{width:1440,height:1200}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());await page.goto(base);
+  await page.locator('nav').getByRole('button',{name:'Content Research',exact:true}).click();await page.getByLabel('Competitor usernames (up to five, separated by commas)').fill('travelqa');await page.getByLabel('Industry hashtags (up to three, separated by commas)').fill('travelplanning');await page.getByLabel('Research focus and observed visual notes',{exact:true}).fill('Holiday travel tips');
+  await page.getByRole('button',{name:'Save watchlist',exact:true}).click();await page.getByText('Watchlist saved.',{exact:true}).waitFor();assert.equal(paid,0);
+  await page.getByRole('button',{name:'Research now',exact:true}).click();await page.getByRole('heading',{name:'Public content sample'}).waitFor();assert.equal(collects,1);assert.equal(paid,0);await page.getByRole('button',{name:'Analyze patterns & draft experiments',exact:true}).click();await done();
+  await page.getByRole('button',{name:'Refresh results',exact:true}).click();await page.getByRole('heading',{name:'Analysis for review'}).waitFor();assert.equal(paid,1);assert.equal(sends,0);
+  await page.getByRole('button',{name:'Use research in new plan',exact:true}).click();await page.getByLabel('Plan title',{exact:true}).waitFor();assert.equal(await page.getByLabel('Campaign goal and context',{exact:true}).inputValue(),'Test an original idea for this brand using the selected research. Research focus: Holiday travel tips');
+  await page.getByLabel('Posting date and time',{exact:true}).fill(new Date(Date.now()+3*86400000).toISOString().slice(0,10)+'T15:00');await page.getByRole('button',{name:'Save posting days',exact:true}).click();await page.getByRole('heading',{name:'Research-informed content plan',exact:true}).waitFor();const plan=app.store.read().contentPlans[0];assert.equal(plan.researchEvidence.posts[0].id,'post');assert.match(plan.researchAnalysis,/Hypothesis/);assert.equal(sends,0);
+  await page.locator('nav').getByRole('button',{name:'Comments & messages',exact:true}).click();await page.getByRole('heading',{name:'Direct message · customer',exact:true}).waitFor();await page.getByRole('button',{name:'Collect recent comments & messages',exact:true}).click();await page.getByText('Collected 0 comments and 1 messages.',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Mark for human follow-up',exact:true}).click();await page.getByText('Handling updated: human',{exact:true}).waitFor();assert.equal(app.store.read().inboxHandling[account.id+':'+item.id].status,'human');await page.getByRole('button',{name:'Draft suggested reply',exact:true}).click();await done();await page.getByRole('button',{name:'Refresh saved inbox',exact:true}).click();await page.waitForFunction(()=>document.querySelector('[name=reply]')?.value==='Which destination and dates are you considering?');assert.equal(paid,2);assert.equal(sends,0);
+  await page.getByLabel('Reply for review',{exact:true}).fill('Reviewed reply that should survive a failed save.');failSave=true;await page.getByRole('button',{name:'Save draft',exact:true}).click();await page.getByText('Simulated connection failure',{exact:true}).first().waitFor();assert.equal(await page.getByLabel('Reply for review',{exact:true}).inputValue(),'Reviewed reply that should survive a failed save.');
+  await page.getByRole('button',{name:'Save & approve reply',exact:true}).click();await page.getByText('Exact reply saved and approved. Review recipient before Send.',{exact:true}).waitFor();assert.equal(sends,0);
+  await page.getByLabel('Reply for review',{exact:true}).fill('An edited reply');assert.equal(await page.getByRole('button',{name:'Send approved reply',exact:true}).isDisabled(),true);await page.getByRole('button',{name:'Save & approve reply',exact:true}).click();await page.getByText('Exact reply saved and approved. Review recipient before Send.',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Send approved reply',exact:true}).click();await page.getByText('Reply sent.',{exact:true}).waitFor();assert.equal(sends,1);await page.getByLabel('Show',{exact:true}).selectOption('all');assert.equal(await page.getByRole('button',{name:'Send approved reply',exact:true}).isDisabled(),true);
+  await mkdir(path.join(process.cwd(),'build'),{recursive:true});await page.screenshot({path:'build/growth-inbox-qa.png',fullPage:true});
+  await page.locator('nav').getByRole('button',{name:'Content Research',exact:true}).click();await page.getByRole('heading',{name:'Public content sample'}).waitFor();await page.locator('#toast').evaluate(el=>el.style.display='none');await page.screenshot({path:'build/growth-research-qa.png',fullPage:true});await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1));await page.screenshot({path:'build/growth-mobile-qa.png',fullPage:true});assert.deepEqual(errors,[]);
+  const request=async(p,b)=>{const r=await fetch(base+p,{method:'POST',headers:{'X-Sniff-Client':'1','Content-Type':'application/json'},body:JSON.stringify(b)});return r.status;};
+  assert.equal(await request('/api/inbox/send',{accountId:account.id,itemId:item.id,version:reply.version}),400);assert.equal(sends,1);
+  assert.equal(await request('/api/research/collect',{accountId:account.id,brandId:'other'}),409);assert.equal(collects,1);
+  console.log('Research → analysis → planner, inbox → draft → approval → explicit mocked send, preserved edits, account boundaries and no automatic sends passed.');
+ }finally{await browser.close();await app.close();await rm(dir,{recursive:true,force:true});}
+})().catch(e=>{console.error(e);process.exit(1);});
