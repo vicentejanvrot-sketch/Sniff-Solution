@@ -15,7 +15,7 @@ function fixture(){
   if(u.hostname==='graph.facebook.com'){
    assert.equal(opts.headers.Authorization,'Bearer private');assert.equal(u.searchParams.has('access_token'),false);
    if(opts.method==='POST'){sends++;if(uncertain)throw Error('Lost response');return Response.json({id:'sent-id'});}
-   if(deny)return Response.json({error:{code:200}},{status:403});
+   if(deny)return Response.json({error:{code:200,message:'Messaging access is disabled for credential private'}},{status:403});
    if(u.searchParams.has('fields')&&u.searchParams.get('fields').startsWith('business_discovery'))return Response.json({business_discovery:{followers_count:100,media:{data:[{id:'p1',caption:'A hook',media_type:'VIDEO',media_product_type:'REELS',permalink:'https://www.instagram.com/reel/abc/',like_count:10,comments_count:2,view_count:0},{id:'p2',permalink:'javascript:alert(1)',caption:'<script>',media_type:'IMAGE'}]}}});
    if(u.pathname.endsWith('/ig_hashtag_search'))return Response.json({data:[{id:'987'}]});
    if(u.pathname.endsWith('/top_media'))return Response.json({data:[{id:'p3',caption:'Industry idea',media_type:'VIDEO',like_count:0,comments_count:0}]});
@@ -52,7 +52,7 @@ test('research scopes accounts, sanitizes links, collects hashtags and throttles
  const f=fixture();await assert.rejects(f.client.research(other,{competitors:['foo']}),/Connected account/);
  const r=await f.client.research(aid,{competitors:['foo'],hashtags:['travel']});assert.equal(r.posts.length,3);assert.equal(r.posts.find(p=>p.id==='p1').views,0);assert.equal(r.posts.find(p=>p.id==='p2').permalink,'');assert.equal(r.posts.find(p=>p.id==='p2').views,null);
  await assert.rejects(f.client.research(aid,{competitors:['foo']}),/Wait until/);
- const denied=fixture();denied.deny();const result=await denied.client.research(aid,{competitors:['foo']});assert.equal(result.posts.length,0);assert.match(result.warnings[0],/Meta access rejected/);
+ const denied=fixture();denied.deny();const result=await denied.client.research(aid,{competitors:['foo']});assert.equal(result.posts.length,0);assert.match(result.warnings[0],/Meta access rejected/);assert.match(result.warnings[0],/Messaging access is disabled/);assert.match(result.warnings[0],/\[redacted\]/);assert.ok(!result.warnings[0].includes('credential private'));
 });
 test('inbox collection never sends, requires exact approval/version and prevents duplicate sends',async()=>{
  const f=fixture();const r=await f.client.syncInbox(aid);assert.equal(r.comments,1);assert.equal(r.messages,1);assert.equal(f.sends(),0);assert.equal((await f.client.list(aid)).items.length,2);
