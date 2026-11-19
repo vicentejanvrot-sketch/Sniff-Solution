@@ -37,7 +37,7 @@ const path=require('node:path');
   assert.equal(textCalls,0);assert.equal(imageCalls,0);await page.getByRole('button',{name:'Prepare unfinished days'}).click();
   await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('queued'));
   for(let i=0;i<100&&app.store.read().jobs.some(j=>['queued','running'].includes(j.status));i++)await new Promise(r=>setTimeout(r,50));
-  await page.getByRole('button',{name:'Refresh results',exact:true}).click();await page.locator('[name=caption]').first().waitFor();
+  await page.getByRole('button',{name:'Refresh results',exact:true}).click();await page.waitForFunction(expected=>document.querySelector('[name=caption]')?.value===expected,fields.caption);
   assert.equal(await page.locator('[name=caption]').first().inputValue(),fields.caption);assert.equal(textCalls,2);
   await page.getByRole('button',{name:'Save & approve day',exact:true}).first().click();await page.waitForFunction(()=>document.querySelector('[data-produce]').disabled===false);
   await page.getByRole('button',{name:'Open Image Studio',exact:true}).click();await page.locator('#production-form').waitFor();
