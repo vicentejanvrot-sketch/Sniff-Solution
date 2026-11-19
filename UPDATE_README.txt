@@ -3,12 +3,10 @@ SNIFF SOLUTION - COMPLETE APP FOLDER
 This ZIP is the complete runnable Windows app: SniffSolution.exe,
 START_SNIFF.cmd, all app files, and bundled Node.js, Python, FFmpeg and FFprobe.
 VERSION.txt and build-info.json show its version and source commit.
-This update is version 0.4.4. Changing a posting time no longer hides compatible
-finished media from earlier plan versions. Existing files and approvals remain
-intact; the planner verifies that creative content still matches before reuse.
-Unfinished originals offer Finish saved output directly in the planner. Review
-and approve the resulting final asset before scheduling; no new AI generation
-is needed for that local rendering step. All earlier updates are included.
+This update is version 0.4.5. Performance can download live Instagram Insights
+from the existing publishing service. The deployment follows merged main and
+includes analytics verification while preserving existing operational flags.
+All earlier planner, media recovery and direct scheduling updates are included.
 See PHASE4_TEST_GUIDE.md for setup, verification and current limits.
 (GitHub "Code > Download ZIP" / "Source code" archives are NOT this app.)
 

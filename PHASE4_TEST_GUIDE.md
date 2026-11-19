@@ -1,13 +1,13 @@
-# Phase 4 · v0.4.4
+# Phase 4 · v0.4.5
 
 ## Install the complete Windows update
 
-Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.4-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
+Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.5-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
 
 1. Quit Sniff Solution from its tray menu. Closing the browser leaves the old server running. Let active work finish.
 2. Extract **all** ZIP contents over the existing app folder and replace application files.
 3. Run **START_SNIFF.cmd** from that folder. It refreshes the desktop and Start menu shortcuts to that exact copy.
-4. Confirm **v0.4.4** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
+4. Confirm **v0.4.5** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
 
 The ZIP contains the launcher, app, Node.js, Python, FFmpeg and FFprobe. Real `.env`, `.data`, API keys and user files are excluded. Overwriting app files preserves desktop records/settings in `%LOCALAPPDATA%\SniffSolution` and existing checkout `.env`/`.data`. Retain the same publishing owner key, encryption key, workspace and cloud service.
 
@@ -36,6 +36,20 @@ No additional licensed service or new cloud instance is required. This extends t
 The worker collects at most once per six hours per account automatically, with a five-minute manual cooldown and a database compare-and-swap claim. One account is checked per worker tick. Publishing is checked first. The existing signed Cron wake also starts a due analytics check. Collection only runs while Render is awake; a free sleeping service is not an always-on guarantee. No new Cron job is required.
 
 ## Analytics acceptance
+
+Live setup verification on November 18, 2026: the existing Supabase project received
+`phase4_private_instagram_insights`; RLS is enabled, anon/authenticated access is
+revoked, and only the backend role has data access. The existing Render service
+now deploys `main` with `INSIGHTS_ENABLED=true`. The existing account connection
+successfully collected one account-day and seven published-post observations
+without permission errors or warnings. No new service, credentials or account
+permission grant was needed. These initial post metrics were returned as zero;
+they are observations, not proof that Instagram has finished processing them.
+Compare later captures with the same posts in native Instagram Insights.
+
+The Blueprint follows `main` and tests Insights alongside publishing. Operational
+flags use `sync: false` so later Blueprint syncs preserve values set in Render.
+For a fresh service only, set those flags deliberately after its setup checks.
 
 - Compare a known published image and Reel against Instagram Insights, allowing for processing delays (up to 48 hours), capture time, organic versus promoted surfaces and metric definitions.
 - Verify views, reach, likes, comments, saves and shares where returned; an unavailable metric must show **Unavailable**, while a returned zero stays **0**.

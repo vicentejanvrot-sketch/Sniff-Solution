@@ -174,6 +174,8 @@ Performance collects Instagram account daily metrics and lifetime observations f
 
 Cloud analytics requires the additive private schema in db/phase4_insights.sql, the Phase 4 cloud code, INSIGHTS_ENABLED=true on the existing Render service and appropriate Meta Insights permissions. No new service is provisioned. Background sync runs while the existing cloud process is awake, at most once per six hours per account; manual refresh has a five-minute cooldown. Existing signed publishing wake requests also trigger a due Insights check after publishing. Account history starts with collection; no full historical backfill, external-post import, follower demographics, ad reporting or conversion attribution is implemented. See [PHASE4_TEST_GUIDE.md](PHASE4_TEST_GUIDE.md).
 
+The existing owner workspace was enabled and collected its first live observations on November 18, 2026. Version 0.4.5 keeps the Render Blueprint on merged `main`, includes Insights in deployment checks, and preserves the existing operational flags during Blueprint sync. Use Performance → Refresh saved results to download observations; Request Instagram refresh collects newer observations subject to the five-minute cooldown. Native Instagram comparison remains an acceptance check, especially while newly published metrics are still processing.
+
 
 ## 0.4.1 speech-to-text throughout writing forms
 

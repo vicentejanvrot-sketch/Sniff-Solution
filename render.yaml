@@ -1,18 +1,21 @@
-# Phase 3 staging foundation. Live publishing is gated by PUBLISHING_ENABLED; never enable without a verified owner-approved post.
+# Existing publishing/Insights service. Operational flags are managed in Render;
+# Blueprint sync must preserve the owner's accepted publishing and analytics setup.
 services:
   - type: web
     name: sniff-publishing
     runtime: node
-    branch: phase3-automated-publishing
+    branch: main
     plan: free
-    buildCommand: node --check cloud/publishing-server.mjs && node --check lib/publish-cloud.mjs && node --test test/publishing-cloud.test.mjs test/publishing.test.mjs test/publish-cloud.test.mjs
+    buildCommand: node --check cloud/publishing-server.mjs && node --check lib/publish-cloud.mjs && node --check lib/insights.mjs && node --test test/publishing-cloud.test.mjs test/publishing.test.mjs test/publish-cloud.test.mjs test/insights.test.mjs
     startCommand: node cloud/publishing-server.mjs
     healthCheckPath: /healthz
     envVars:
       - key: NODE_VERSION
         value: "22"
       - key: PUBLISHING_ENABLED
-        value: "false"
+        sync: false
+      - key: INSIGHTS_ENABLED
+        sync: false
       - key: META_APP_ID
         value: "1436334624843806"
       - key: META_CONFIGURATION_ID
