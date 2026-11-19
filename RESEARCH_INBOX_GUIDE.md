@@ -1,4 +1,4 @@
-# Content Research and Comments & messages · 0.4.6
+# Content Research and Comments & messages · 0.4.7
 
 This release extends the existing desktop app and existing Render/Supabase
 services. It does not provision a new service, buy a subscription, send messages
@@ -132,3 +132,9 @@ Primary API references:
 - https://developers.facebook.com/documentation/instagram-platform/webhooks/setup
 - https://developers.facebook.com/documentation/instagram-platform/webhooks/fields
 - https://developers.facebook.com/documentation/business-messaging/instagram-messaging/changelog/
+
+## Live verification and clearer partial results (0.4.7)
+
+Travel One public competitor discovery returned 25 Reels from Expedia in the live test. The owner also collected 50 posts from two selected competitor accounts while a third account returned no accessible public professional-account media. Hashtag collection is independently blocked by Meta Public Content Access approval. Successful competitor results remain usable for analysis and planning. Collection status shows the success count; repeated hashtag-approval failures are grouped under Collection warnings.
+
+Meta accepted the owner-approved reconnection with the existing configured permissions. Its remaining DM error specifically reported that outside-app Direct Messaging access was disabled. The owner must enable Allow access to messages in the Instagram mobile Connected tools settings before live DM collection can succeed. This is separate from the app login permission and does not require another paid service.

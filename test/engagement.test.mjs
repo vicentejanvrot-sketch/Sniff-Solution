@@ -8,7 +8,7 @@ import {once} from 'node:events';
 
 const aid='00000000-0000-4000-8000-000000000001',other='00000000-0000-4000-8000-000000000002';
 function fixture(){
- const key=randomBytes(32).toString('base64'),now=Date.parse('2026-11-19T02:00:00Z');let sends=0,uncertain=false,deny=false;
+ const key=randomBytes(32).toString('base64'),now=Date.parse('2026-11-19T02:00:00Z');let sends=0,uncertain=false,deny=false,hashtagDenied=false;
  const a={id:aid,workspace_id:'developer',brand_id:'brand',instagram_user_id:'123456',username:'brand',status:'connected',token_ciphertext:encryptToken('private',key,'developer:brand:123456')};
  const tables={marketing_instagram_accounts:[a],marketing_social_sync:[],marketing_inbox:[],marketing_inbox_replies:[]};
  const fetcher=async(target,opts)=>{const u=new URL(target);
@@ -16,6 +16,7 @@ function fixture(){
    assert.equal(opts.headers.Authorization,'Bearer private');assert.equal(u.searchParams.has('access_token'),false);
    if(opts.method==='POST'){sends++;if(uncertain)throw Error('Lost response');return Response.json({id:'sent-id'});}
    if(deny)return Response.json({error:{code:200,message:'Messaging access is disabled for credential private'}},{status:403});
+   if(hashtagDenied&&u.pathname.endsWith('/ig_hashtag_search'))return Response.json({error:{code:10,message:"To use Instagram Public Content Access, your use of this endpoint must be reviewed and approved by Facebook."}},{status:403});
    if(u.searchParams.has('fields')&&u.searchParams.get('fields').startsWith('business_discovery'))return Response.json({business_discovery:{followers_count:100,media:{data:[{id:'p1',caption:'A hook',media_type:'VIDEO',media_product_type:'REELS',permalink:'https://www.instagram.com/reel/abc/',like_count:10,comments_count:2,view_count:0},{id:'p2',permalink:'javascript:alert(1)',caption:'<script>',media_type:'IMAGE'}]}}});
    if(u.pathname.endsWith('/ig_hashtag_search'))return Response.json({data:[{id:'987'}]});
    if(u.pathname.endsWith('/top_media'))return Response.json({data:[{id:'p3',caption:'Industry idea',media_type:'VIDEO',like_count:0,comments_count:0}]});
@@ -40,7 +41,7 @@ function fixture(){
   return Response.json(structuredClone(result));
  };
  const client=createEngagement({url:'https://project.supabase.co',key:'server',workspaceId:'developer',encryptionKey:key,fetcher,clock:()=>now});
- return {client,tables,sends:()=>sends,uncertain:()=>{uncertain=true;},deny:()=>{deny=true;},now};
+ return {client,tables,sends:()=>sends,uncertain:()=>{uncertain=true;},deny:()=>{deny=true;},denyHashtags:()=>{hashtagDenied=true;},now};
 }
 test('research target validation and relative ranking preserve unknowns and sample limits',()=>{
  assert.deepEqual(researchTargets({competitors:['Foo','foo'],hashtags:['Travel']}),{competitors:['foo'],hashtags:['travel']});
@@ -61,6 +62,9 @@ test('inbox collection never sends, requires exact approval/version and prevents
  await f.client.saveReply(aid,'comment:c1',{text:'Which dates are you considering?',version:1,approved:true});await assert.rejects(f.client.sendReply(aid,'comment:c1',1),/approve/);
  const results=await Promise.allSettled([f.client.sendReply(aid,'comment:c1',2),f.client.sendReply(aid,'comment:c1',2)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(f.sends(),1);
  await assert.rejects(f.client.saveReply(aid,'comment:c1',{text:'Changed',version:2,approved:true}),/already sent/);
+});
+test('blocked hashtag approval is grouped once while successful competitor evidence is retained',async()=>{
+ const f=fixture();f.denyHashtags();const r=await f.client.research(aid,{competitors:['foo'],hashtags:['travel','holiday','packing']});assert.equal(r.posts.length,2);assert.equal(r.warnings.length,1);assert.match(r.warnings[0],/Hashtag discovery needs Meta approval/);assert.match(r.warnings[0],/Competitor results are still available/);assert.ok(r.warnings[0].length<250);
 });
 test('changed inbound text, closed DM windows and ambiguous outcomes block unsafe resends',async()=>{
  const f=fixture();await f.client.syncInbox(aid);await f.client.saveReply(aid,'dm:m1',{text:'How can we help?',version:0,approved:true});

@@ -3,12 +3,13 @@ SNIFF SOLUTION - COMPLETE APP FOLDER
 This ZIP is the complete runnable Windows app: SniffSolution.exe,
 START_SNIFF.cmd, all app files, and bundled Node.js, Python, FFmpeg and FFprobe.
 VERSION.txt and build-info.json show its version and source commit.
-This update is version 0.4.6. Content Research adds competitor watchlists,
+This update is version 0.4.7. Content Research adds competitor watchlists,
 industry hashtag discovery, public-metric comparison, AI analysis and a new-plan
 handoff. Comments & messages adds a private inbox, AI reply drafts, explicit
 approval/send and human follow-up tracking. See RESEARCH_INBOX_GUIDE.md for
 Meta permissions, webhook setup, limits and live acceptance. No reply is sent
 by installing, collecting, drafting or approving; Send is a separate action.
+Partial research now shows a short success count and grouped collection warnings.
 All previous updates are included. Existing settings and records are kept.
 See PHASE4_TEST_GUIDE.md for setup, verification and current limits.
 (GitHub "Code > Download ZIP" / "Source code" archives are NOT this app.)
