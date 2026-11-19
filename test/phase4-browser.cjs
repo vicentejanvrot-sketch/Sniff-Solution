@@ -47,6 +47,7 @@ const path=require('node:path');
   await page.getByRole('button',{name:'Start production',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('Production queued'));
   for(let i=0;i<100&&app.store.read().jobs.some(j=>['queued','running'].includes(j.status));i++)await new Promise(r=>setTimeout(r,50));
+  await page.locator('nav').getByRole('button',{name:'Content Planner',exact:true}).click();await page.getByRole('button',{name:'Refresh results',exact:true}).click();
   await page.getByRole('button',{name:'Finish saved output',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('Finishing the saved original'));
   for(let i=0;i<100&&app.store.read().jobs.some(j=>['queued','running'].includes(j.status));i++)await new Promise(r=>setTimeout(r,50));
   const media=app.store.read().media.find(m=>m.role==='rendered');assert.ok(media);assert.equal(imageCalls,1);assert.equal(textCalls,2);

@@ -1,13 +1,13 @@
-# Phase 4 · v0.4.3
+# Phase 4 · v0.4.4
 
 ## Install the complete Windows update
 
-Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.3-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
+Use the GitHub Release asset **Sniff-Solution-Windows-Full-App-0.4.4-&lt;commit&gt;.zip**. The source archive is not the runnable distribution.
 
 1. Quit Sniff Solution from its tray menu. Closing the browser leaves the old server running. Let active work finish.
 2. Extract **all** ZIP contents over the existing app folder and replace application files.
 3. Run **START_SNIFF.cmd** from that folder. It refreshes the desktop and Start menu shortcuts to that exact copy.
-4. Confirm **v0.4.3** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
+4. Confirm **v0.4.4** in the header/sidebar and the build commit against build-info.json. Reopen through the refreshed shortcut.
 
 The ZIP contains the launcher, app, Node.js, Python, FFmpeg and FFprobe. Real `.env`, `.data`, API keys and user files are excluded. Overwriting app files preserves desktop records/settings in `%LOCALAPPDATA%\SniffSolution` and existing checkout `.env`/`.data`. Retain the same publishing owner key, encryption key, workspace and cloud service.
 
@@ -20,7 +20,7 @@ The ZIP contains the launcher, app, Node.js, Python, FFmpeg and FFprobe. Real `.
 5. Select **Start production** to make a separate paid media request. Approve the finished asset in **Media Library** after checking the actual result. The planner approval does not approve generated media.
 6. Return to the plan and refresh. Select an approved finished output and connected account (sole valid options are selected automatically). Review the saved caption, time and time zone, then choose **Schedule & activate**, or **Schedule & activate ready posts** for the ready days in this plan. This authorizes automatic public Instagram publishing at the saved times; it creates the schedule and activates it in the cloud without another calendar step.
 7. Confirm the planner reports **scheduled for automatic publishing**. Existing local schedules from older versions can be activated here without repeating the dates or creating duplicates. Already activated posts are disabled and excluded from the ready-post action. **Refresh results** checks cloud status for activated posts. Use Publishing Calendar for changes/history if needed; no visit there is required for normal planner scheduling.
-8. Refresh planner progress to follow generation, media review, scheduling and publication. Editing a day creates a new version; existing media remains stored under its previous version. Cancel a local schedule before editing its day. Published/history records remain protected.
+8. Refresh planner progress to follow generation, media review, scheduling and publication. Editing a day creates a new version. Changes to date/time, working title or internal purpose preserve compatible earlier outputs; actual creative-copy changes still require matching reviewed media. Cancel a local schedule before editing its day. Published/history records remain protected.
 9. Export a plan, restart the app and verify dates, text, reviews and links remain. Existing Phase 1–3 records and keys must still be present.
 
 ## Existing cloud analytics setup
@@ -80,3 +80,13 @@ The new planner action reuses saved local time, IANA time zone, approved caption
 - Each post has an individual result. A partial batch keeps successful activations and reports failures; active/uncertain posts are excluded from subsequent ready-post actions. If activation acknowledgement is uncertain, choose **Check activation status**. This reads the existing cloud queue without restaging or enqueuing again. A missing cloud record does not authorize a blind retry.
 - Cloud/network failures preserve the schedule and show an error instead of claiming success. A local media-conversion failure before cloud contact leaves the post local and retryable after fixing the media/renderer. Validate media approval/version, brand/account ownership, future time and plan revision before activation.
 - Confirm no public posting occurs during automated testing. Integration and browser tests mock the publishing service; real-account publication is the owner's acceptance check.
+
+
+## Preserve media after posting-time edits (0.4.4)
+
+Earlier builds matched generated media only by the plan's numeric version. Saving a different posting time increased that version and made already-approved files disappear from the output selector. The files and approvals were still stored. This release uses the retained approved-day history and immutable production snapshot to verify compatible content instead. The browser and scheduling API apply the same matching rule.
+
+- Produce and approve an image/video, change only the posting date/time, then Save & approve day. The existing approved output must remain selectable, retain its media approval and schedule at the new time without another generation/render job. Older records are handled on read; no data rewrite or approval reset occurs.
+- Working-title/internal-purpose edits do not alter pixels. Changes to the actual creative brief, public caption, on-screen text, aspect, duration or media format must not silently reuse incompatible outputs. Brand, plan and day ownership remain checked.
+- An approved provider original is not a finished rendered output. A failed render with its original saved offers **Finish saved output** directly in the planner. This queues local rendering, preserves the original/provider billing record and keeps the day link. Review and approve the new final output; it then appears in Approved output.
+- If a planned time has already passed, choose a future time at least two minutes ahead and save/approve the change before activation. The compatible media remains available. Existing activated schedules remain immutable through the plan editor; use the existing cancellation/editing policy.

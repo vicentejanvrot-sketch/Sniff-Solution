@@ -1,4 +1,5 @@
 import {videoModels,videoModel,imageModel,accountImageModels} from './lib/media-models.mjs';
+import {compatibleOutput} from './public/planner-media.js';
 import {analyticsReport,analyticsCSV} from './lib/analytics.mjs';
 import {createPlan,findEntry,ensureEntryEditable,saveEntry,plannerPrompt,parsePlanOutput,plannerProduction} from './lib/planner.mjs';
 import {desktopPublishing} from './lib/desktop-publishing.mjs';
@@ -313,7 +314,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       }
       ensureEntryEditable(s,entry);
       const m=s.media.find(m=>m.id===b.mediaId),j=s.jobs.find(j=>j.id===m?.jobId);
-      if(!j||j.plannerEntryId!==entry.id||j.plannerEntryVersion!==entry.version||m.role!=='rendered')fail('Choose finished media generated from this approved day.',409);
+      if(!compatibleOutput(m,j,plan,entry))fail('Choose a compatible finished output for this approved day. Changes to posting time alone do not require new media.',409);
       const record=validateSchedule(s,{brandId:plan.brandId,accountId:b.accountId,mediaId:m.id,caption:entry.caption,timezone:plan.timezone,localTime:entry.localTime},{accounts});
       if(b.activate===true&&Date.parse(record.scheduledAt)<Date.now()+120000)fail('Choose a publication at least two minutes in the future.',409);
       Object.assign(record,{plannerPlanId:plan.id,plannerEntryId:entry.id,plannerEntryVersion:entry.version});(s.schedules??=[]).unshift(record);audit(s,'schedule.created',record.id);return {item:record,created:true};
@@ -543,6 +544,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    staticFiles['/thumbnails.js']=['thumbnails.js','text/javascript; charset=utf-8'];
    staticFiles['/timing.js']=['timing.js','text/javascript; charset=utf-8'];
    staticFiles['/planner.js']=['planner.js','text/javascript; charset=utf-8'];
+   staticFiles['/planner-media.js']=['planner-media.js','text/javascript; charset=utf-8'];
    staticFiles['/analytics.js']=['analytics.js','text/javascript; charset=utf-8'];
    staticFiles['/video-brief.js']=['video-brief.js','text/javascript; charset=utf-8'];
    staticFiles['/reconciliation.js']=['reconciliation.js','text/javascript; charset=utf-8'];

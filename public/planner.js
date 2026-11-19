@@ -1,4 +1,5 @@
 import {stopDictation} from './dictation.js';
+import {compatibleProduction,compatibleOutput} from './planner-media.js';
 export function mountPlanner(el,{state,activeBrand,esc,heading,send,api,refresh:refreshApp,navigate,toast,startPlanProduction,preview}){
  const refresh=async()=>Object.assign(state,await refreshApp());
  const view=Symbol('planner');el.plannerView=view;
@@ -7,7 +8,9 @@ export function mountPlanner(el,{state,activeBrand,esc,heading,send,api,refresh:
  const q=s=>el.querySelector(s);
  const busy=e=>state.jobs.some(j=>j.plannerEntryId===e.id&&['queued','running'].includes(j.status));
  const schedule=e=>(state.schedules||[]).find(x=>x.plannerEntryId===e.id&&x.status!=='cancelled');
- const outputs=e=>state.media.filter(m=>m.role==='rendered'&&state.jobs.some(j=>j.id===m.jobId&&j.plannerEntryId===e.id&&j.plannerEntryVersion===e.version));
+ const ownerPlan=e=>(state.contentPlans||[]).find(p=>p.entries.some(x=>x.id===e.id));
+ const outputs=e=>state.media.filter(m=>compatibleOutput(m,state.jobs.find(j=>j.id===m.jobId),ownerPlan(e),e));
+ const unfinished=e=>state.jobs.find(j=>compatibleProduction(j,ownerPlan(e),e)&&['failed','interrupted','incomplete'].includes(j.status)&&(j.mediaIds||[]).some(mid=>state.media.some(m=>m.id===mid&&m.role==='generated'&&!state.media.some(f=>f.role==='rendered'&&f.sourceId===mid))));
  const models=()=>['openai','anthropic'].filter(p=>state.providerStatus[p]&&state.settings.providers[p]?.model);
  function progress(e){const x=schedule(e);if(x){if(x.activationState==='uncertain')return 'activation needs checking';if(x.activationState==='staging')return 'activating / check status';if(x.activationState==='active'&&(x.cloudStatus||x.status)==='scheduled')return 'scheduled for automatic publishing';if(!x.activationState&&x.status==='scheduled')return 'saved locally · not activated';return x.cloudStatus||x.status;}if(busy(e))return 'request in progress';const media=outputs(e);return media.some(m=>m.status==='approved')?'ready to schedule':media.length?'media needs review':e.status;}
  const unsaved=(e,form)=>['title','purpose','prompt','onScreenText','caption','localTime'].some(k=>form.elements[k].value.trim()!==String(e[k]||'').trim());
@@ -35,6 +38,7 @@ export function mountPlanner(el,{state,activeBrand,esc,heading,send,api,refresh:
    form.querySelector('[data-prepare]').onclick=()=>prepare(plan,[entry.id],!!entry.prompt);
    form.querySelector('[data-produce]').onclick=()=>startPlanProduction(plan,entry);
    form.querySelector('[data-media]').onclick=()=>navigate('media');
+   const finish=form.querySelector('[data-finish-planner]');if(finish)finish.onclick=async()=>{finish.disabled=true;try{await send('/api/production/'+finish.dataset.finishPlanner+'/render-saved','POST',{});await refresh();if(stillHere())draw();toast('Finishing the saved original locally. Review and approve the final output when ready. No new AI generation.');}catch(e){toast(e.message,true);finish.disabled=false;}};
    choices(form,entry);
    form.querySelector('[data-schedule]').onclick=()=>scheduleDay(plan,entry,form);
    form.addEventListener('input',updateBatch);form.elements.mediaId.onchange=updateBatch;form.elements.accountId.onchange=updateBatch;
@@ -48,7 +52,7 @@ export function mountPlanner(el,{state,activeBrand,esc,heading,send,api,refresh:
   '<div class="actions"><button type="submit" value="needs-review">Save for review</button><button type="submit" value="approved">Save & approve day</button><button type="button" data-prepare>'+ (e.prompt?'Regenerate this day':'Prepare this day')+'</button><button type="button" data-produce '+(e.status!=='approved'?'disabled':'')+'>Open '+(e.format==='reel'?'Video':'Image')+' Studio</button><button type="button" data-media>Review media</button></div>'+
   (locked?'<p class="hint">'+(schedule(e)?'The saved publication is linked to this day. Activate or check its status here; Publishing Calendar remains available for changes and history.':'An active request protects this day from edits. Refresh results when it finishes.')+'</p>':'')+
   (schedule(e)?'<p class="note">Saved publication: '+esc(schedule(e).localTime.replace('T',' '))+' · '+esc(schedule(e).timezone)+' · @'+esc(schedule(e).username||'Instagram')+'. Its existing schedule is reused.</p>':'')+
-  (media.length?'<div class="actions">'+media.map(m=>'<button type="button" data-preview="'+m.id+'">Preview · '+esc(m.status)+'</button>').join('')+'</div>':'')+
+  (media.length?'<div class="actions">'+media.map(m=>'<button type="button" data-preview="'+m.id+'">Preview · '+esc(m.status)+'</button>').join('')+'</div>':unfinished(e)?'<div class="note"><p>The original is saved, but its final rendering is unfinished. Finish it locally, then review and approve the new output.</p><button type="button" data-finish-planner="'+unfinished(e).id+'" '+(busy(e)?'disabled':'')+'>Finish saved output</button></div>':'<p class="hint">No compatible finished output yet. Generate media from this day, or review an existing result. Changing only the posting time preserves compatible outputs.</p>')+
   '<div class="actions"><label>Approved output<select name="mediaId"><option value="">Choose finished approved media</option>'+media.filter(m=>m.status==='approved').map(m=>'<option value="'+m.id+'">'+esc(m.name)+'</option>').join('')+'</select></label><label>Instagram account<select name="accountId"><option value="">Choose account</option>'+accounts.filter(a=>a.brand_id===(state.contentPlans||[]).find(p=>p.entries.some(x=>x.id===e.id))?.brandId&&a.status==='connected').map(a=>'<option value="'+a.id+'">@'+esc(a.username)+'</option>').join('')+'</select></label><button type="button" data-schedule '+(e.status!=='approved'?'disabled':'')+'>'+(['staging','uncertain'].includes(schedule(e)?.activationState)?'Check activation status':schedule(e)?.activationState==='active'?'Activated':'Schedule & activate')+'</button></div><p class="hint">'+(e.history||[]).length+' previous versions retained. Scheduling uses the saved approved caption and this day’s posting time. Schedule & activate sends this post for automatic cloud publishing at its saved time. No calendar visit or repeated date entry is needed.</p><details><summary>Previous versions</summary>'+((e.history||[]).map(v=>'<div class="note"><strong>Version '+v.version+' · '+esc(v.updatedAt)+'</strong><p>'+esc(v.prompt)+'</p><p>Caption: '+esc(v.caption)+'</p></div>').join('')||'<p>No previous versions yet.</p>')+'</details><p data-day-status role="status"></p></form>';}
  async function prepare(plan,entryIds,regenerate=false){
   if(!entryIds.length)return toast('No unfinished days to prepare. Use Regenerate on an individual day.');

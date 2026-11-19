@@ -192,3 +192,8 @@ Small Calibri overlays now use outline glyphs instead of unsupported monochrome 
 ## 0.4.3 activate planned posts without repeating calendar steps
 
 Content Planner now combines scheduling and cloud activation in **Schedule & activate**. **Schedule & activate ready posts** handles all ready days in the selected plan. Saved dates, times, captions and approved outputs are reused. A sole approved output/connected account is selected automatically; multiple choices still need selection. Already-created local schedules can be activated in place with the same IDs. Already-active posts are excluded, and uncertain results offer a status check without resubmission. The planner distinguishes local-only schedules from posts scheduled for automatic publishing. Installing this update or saving a plan never activates posts by itself. Publishing Calendar remains available for changes and publication history. All previous content, configuration and approvals remain preserved.
+
+
+## 0.4.4 retain approved outputs when posting times change
+
+Date/time edits no longer hide compatible generated media from the planner. Earlier production versions are matched against retained creative-copy history and production snapshots, with the same checks in the browser and scheduling API. Files and approvals are preserved. Actual creative changes still reject incompatible outputs. Failed rendering jobs with a saved original now offer Finish saved output inside the planner; local recovery requires no new AI generation, and its final output still needs media approval.
