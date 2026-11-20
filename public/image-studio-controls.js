@@ -26,7 +26,7 @@ export function enhanceImageStudioControls(form){
   select.after(menu);select.classList.add('studio-native-select');select.tabIndex=-1;select.setAttribute('aria-hidden','true');
   const summary=menu.querySelector('summary'),value=menu.querySelector('.studio-select-value'),search=menu.querySelector('input'),list=menu.querySelector('.studio-select-options');
   const ratioField=['imageAspect','aspect'].includes(select.name);
-  function drawLabel(target,text,optionValue){target.replaceChildren();if(ratioField){const icon=ratioIcon(optionValue);if(icon)target.append(icon);target.classList.add('studio-ratio-label');}const caption=document.createElement('span');caption.textContent=text;target.append(caption);}
+  function drawLabel(target,text,optionValue){target.replaceChildren();if(ratioField){const icon=ratioIcon(optionValue);if(icon)target.append(icon);target.classList.add('studio-ratio-label');}if(select.name==='color'&&/^#[0-9a-f]{6}$/i.test(optionValue)){const swatch=document.createElement('span');swatch.className='studio-colour-swatch';swatch.style.backgroundColor=optionValue;swatch.setAttribute('aria-hidden','true');target.classList.add('studio-colour-label');target.append(swatch);}const caption=document.createElement('span');caption.textContent=text;target.append(caption);}
   const validation=document.createElement('p');validation.className='studio-select-validation';validation.id=select.id+'-validation';validation.setAttribute('role','alert');validation.hidden=true;menu.after(validation);summary.setAttribute('aria-describedby',validation.id);
   list.setAttribute('aria-label',label+' options');
   function close(){menu.open=false;search.value='';}
