@@ -13,7 +13,7 @@ OPENAI_API_KEY=your-local-key
 HF_API_KEY=the-complete-key-copied-from-Higgsfield
 ```
 
-Restart after editing. Open Settings & Costs, set an image model available to your OpenAI account, and save. Text models and image models have separate settings. Video uses the documented Seedance 2.0 text-to-video adapter; arbitrary model endpoints are not supported. A Higgsfield website subscription does not establish API credit or model access.
+Restart after editing. In Image Studio, choose Higgsfield or OpenAI. For OpenAI, configure a default image model in Settings & Costs or load the account catalog in Image Studio. Text models and image models have separate settings. Higgsfield offers the documented image and video adapters; arbitrary provider endpoints are not supported. A Higgsfield website subscription does not establish API credit or model access.
 
 On Vicente's desktop installation this file is `C:\Users\vicen\AppData\Local\SniffSolution\.env`. Press Windows+R and enter `%LOCALAPPDATA%\SniffSolution` to find it, or use the tray menu's **Edit API settings**. The preferred setting is now `HF_API_KEY`, copied whole from https://open.higgsfield.ai/api-keys; do not add a `Key ` prefix. Older `HF_API_KEY_ID` plus `HF_API_KEY_SECRET` settings still work when `HF_API_KEY` is blank. The complete copied credential is displayed only at creation; create a new key if only its visible ID was saved. Never send credentials in chat.
 
@@ -35,11 +35,11 @@ The default media reservation is US$5 per image or video request. Adjust it and 
 ## Image Studio
 
 1. Create/select a brand. Upload a PNG logo in Media Library, preview it and save its review status as approved. For a custom brand font, upload its licensed TTF/OTF file and approve it too. Only approved logos/fonts appear in the studio overlay selectors. The Rendering font dropdown lists supported installed Windows fonts without requiring an upload.
-2. Open Image Studio. Enter a title and brief, select a format and generate one image. Keep Sniff running. Activity should show generation and rendering phases, then completed.
+2. Open Image Studio. Enter a title and brief, select a provider and model, and choose the model-supported generation options. Choose a finished output format and generate one image. Keep Sniff running. Activity should show generation and rendering phases, then completed. For Higgsfield, confirm the chosen resolution, ratio and quality on the saved request; the original remains at provider resolution.
 3. Open Media Library. The finished PNG appears by default, marked needs review. Select Show saved originals to reveal its preserved original. Preview the finished asset and check its framing and dimensions.
-4. Test a batch of two. Verify two finished assets by default, numbered image 1 and image 2. Show saved originals reveals their two recovery copies; those are not additional AI generations. If a provider returns fewer than requested, Activity should say incomplete.
-5. Select an image as reference, describe an edit or variation, and generate. This sends the selected image to OpenAI. The original remains intact and the new result links back to it.
-6. Test transparent background / background removal with a compatible image model. Inspect downloaded PNG transparency in an image editor. Branding adds an opaque footer when enabled.
+4. Test a supported batch count (OpenAI and Kling allow 1–4, Soul 2 allows 1 or 4, other integrated Higgsfield models return one image per request). Verify numbered finished assets; Show saved originals reveals their recovery copies, not additional generations. If a provider returns fewer than requested, Activity should say incomplete.
+5. Select an image as reference, describe an edit or variation, and generate. This sends the selected image to the selected provider; Higgsfield accepts one PNG/JPEG reference per Sniff request, up to 30 MiB. The original remains intact and the new result links back to it.
+6. Test transparent background / background removal using a compatible OpenAI image model. Inspect downloaded PNG transparency in an image editor. Branding adds an opaque footer when enabled.
 7. Choose Render an existing image, select a source, enable brand overlays, choose the approved logo/font and enter overlay text. Rendering makes no AI call. Verify the footer colour, typography and logo. Fit adds padding; fill crops edges. Each render is a separate derived asset.
 8. Optionally select a saved text draft to fill the brief and caption. Edit both before generation. The saved draft is unchanged.
 

@@ -78,6 +78,7 @@ const path=require('node:path');
   await page.reload();await page.getByRole('heading',{name:'A little focus. A lot of possibility.'}).waitFor();
   await page.locator('nav').getByRole('button',{name:'Image Studio',exact:true}).click();
   await page.getByRole('heading',{name:'Image Studio',exact:true}).waitFor();
+  await page.getByLabel('Generation provider',{exact:true}).selectOption('openai');
   await page.getByLabel('Images in batch',{exact:true}).selectOption('3');
   assert.equal(await page.getByRole('button',{name:'Start production',exact:true}).isDisabled(),true);
   assert.ok((await page.locator('#production-reservation').textContent()).includes('US$150.0000'));

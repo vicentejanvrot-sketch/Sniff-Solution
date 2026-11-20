@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {videoModels,videoPayload,accountImageModels} from '../lib/media-models.mjs';
-import {generateVideo} from '../lib/production.mjs';
+import {videoModels,videoPayload,accountImageModels,higgsfieldImageModels,imageGenerationOptions,higgsfieldImagePayload} from '../lib/media-models.mjs';
+import {generateVideo,generateHiggsfieldImages} from '../lib/production.mjs';
 test('video adapters use model-specific payloads and fixed production endpoints',async()=>{
  for(const model of videoModels){
   let posted=0;const p={prompt:'Reviewed scene.',duration:10,aspect:'9:16',brandSnapshot:{name:'Test'}};
@@ -15,4 +15,20 @@ test('image model discovery filters the private account catalog without generati
  let calls=0;const models=await accountImageModels({env:{OPENAI_API_KEY:'private'},fetcher:async(url,opts)=>{calls++;assert.equal(url,'https://api.openai.com/v1/models');assert.equal(opts.body,undefined);assert.equal(opts.headers.Authorization,'Bearer private');return Response.json({data:[{id:'gpt-image-1'},{id:'gpt-image-1-mini'},{id:'gpt-image-1'},{id:'gpt-text'},{id:'dall-e-3'},{id:'https://untrusted.test'}]});}});
  assert.deepEqual(models,['gpt-image-1','gpt-image-1-mini']);assert.equal(calls,1);assert.ok(!JSON.stringify(models).includes('private'));
  await assert.rejects(accountImageModels({env:{}}),/Configure/);
+});
+test('Higgsfield image choices are validated and use documented generation and edit payloads',async()=>{
+ const png=Buffer.from('89504e470d0a1a0a','hex');
+ for(const m of higgsfieldImageModels){
+  const selection=imageGenerationOptions({imageProvider:'higgsfield',imageModel:m.id},{aspect:'1:1',count:1},'');
+  const p={...selection,count:1,prompt:'A scene',brandSnapshot:{name:'Test'},sourceSnapshot:{mime:'image/png'}};
+  const {endpoint,payload}=higgsfieldImagePayload(m.id,p,'A scene','https://media.example.com/ref.png');
+  assert.equal(endpoint,m.edit||m.id);assert.equal(payload.resolution,m.defaultResolution);assert.equal(payload.aspect_ratio,'1:1');assert.equal(payload.quality,m.defaultQuality);
+  if(m.adapter==='soul')assert.equal(payload.image_url,'https://media.example.com/ref.png');else assert.deepEqual(payload.image_urls,['https://media.example.com/ref.png']);
+  let submitted=0,requests=0,uploaded=0;
+  const generated=await generateHiggsfieldImages({config:{model:m.id},production:p},{env:{HF_API_KEY:'test'},readMedia:async()=>png,fetcher:async(url,opts)=>{assert.equal(opts.headers.Authorization,'Key test');if(url.endsWith('/generate-upload-url'))return Response.json({upload_url:'https://storage.example.com/ref',public_url:'https://media.example.com/ref.png'});if(opts.method==='POST'){submitted++;assert.equal(url,'https://api.higgsfield.ai/'+endpoint);assert.equal(JSON.parse(opts.body).resolution,m.defaultResolution);return Response.json({request_id:'req'});}return Response.json({status:'completed',images:[{url:'https://media.example.com/result.png'}]});},uploader:async(_signed,bytes,mime)=>{uploaded++;assert.deepEqual(bytes,png);assert.equal(mime,'image/png');return 'https://media.example.com/ref.png';},onRequest:async id=>{assert.equal(id,'req');requests++;},onPhase:async()=>{},downloader:async()=>png});
+  assert.equal(generated.images[0].mime,'image/png');assert.equal(submitted,1);assert.equal(requests,1);assert.equal(uploaded,1);
+  assert.throws(()=>imageGenerationOptions({imageProvider:'higgsfield',imageModel:m.id,imageResolution:'unsupported'},{aspect:'1:1',count:1}),/supported resolution/);
+ }
+ const kling=higgsfieldImageModels.find(m=>m.adapter==='kling');assert.equal(higgsfieldImagePayload(kling.id,{count:4,imageResolution:'4k',imageAspect:'16:9'},'scene').payload.series_amount,4);
+ assert.throws(()=>imageGenerationOptions({imageProvider:'higgsfield',imageModel:'invented'},{count:1}),/supported Higgsfield/);
 });

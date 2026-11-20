@@ -1,4 +1,4 @@
-import {videoModels,videoModel,imageModel,accountImageModels} from './lib/media-models.mjs';
+import {videoModels,videoModel,higgsfieldImageModels,imageGenerationOptions,accountImageModels} from './lib/media-models.mjs';
 import {compatibleOutput} from './public/planner-media.js';
 import {watchlist,researchPrompt as growthResearchPrompt,replyPrompt,ensureResearch} from './lib/growth.mjs';
 import {analyticsReport,analyticsCSV} from './lib/analytics.mjs';
@@ -18,7 +18,7 @@ import {skills,providers,id,now,fail,str,normalizeWebsite,validateBrand,validate
 import {providerStatus,generate} from './lib/providers.mjs';
 import {collectWebsite} from './lib/website.mjs';
 import {chooseResearchProvider,researchInput,researchPrompt,parseResearch} from './lib/brand-research.mjs';
-import {productionSettings,productionInput,rendererAvailable,generateImages,generateVideo,renderAsset,thumbnailAsset,higgsfieldCredential} from './lib/production.mjs';
+import {productionSettings,productionInput,rendererAvailable,generateImages,generateHiggsfieldImages,generateVideo,renderAsset,thumbnailAsset,higgsfieldCredential} from './lib/production.mjs';
 import {installedFonts,publicFonts} from './lib/fonts.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const MAX_MEDIA=100*1024*1024;
@@ -64,7 +64,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
  async function removeMedia(file){if(store.mode==='local')await unlink(path.join(uploads,file));else await mediaRequest('DELETE',file);}
  async function readMedia(m){return store.mode==='local'?readFile(path.join(uploads,m.file)):Buffer.from(await(await mediaRequest('GET',m.file)).arrayBuffer());}
  async function saveProductionMedia(work,result,{sourceId='',role='generated',imageIndex=1}={}){
-  const p=work.production,ext=result.mime==='video/mp4'?'mp4':'png';
+  const p=work.production,ext=result.mime==='video/mp4'?'mp4':result.mime==='image/jpeg'?'jpg':result.mime==='image/webp'?'webp':'png';
   const media={id:id(),brandId:work.brandId,name:work.title+'-'+role+'.'+ext,mime:result.mime,size:result.bytes.length,tags:'production, '+role,createdAt:now(),status:'needs-review',version:1,reviewHistory:[],jobId:work.id,sourceId,draftId:p.draftId,caption:p.caption,role,aspect:role==='rendered'?p.aspect:null,requestedAspect:p.aspect,width:result.width||null,height:result.height||null,branding:role==='rendered'&&p.branding,brandSnapshot:p.brandSnapshot};media.file=media.id;
   media.imageIndex=imageIndex;if(p.count>1)media.name=work.title+'-image-'+imageIndex+'-of-'+p.count+'-'+role+'.'+ext;
   if(role==='rendered'&&p.branding&&p.includeBrandText!==false)media.renderingFont=p.systemFontName||p.fontSnapshot?.name||p.brandSnapshot.font;
@@ -85,8 +85,8 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
       const phase=async text=>store.update(s=>{s.jobs.find(j=>j.id===work.id).phase=text;});
       let results,incomplete=false;
       if(p.kind==='image'){
-       await phase('Generating images with OpenAI');
-       const generated=await generateImages(work,{env,fetcher,readMedia});results=generated.images;incomplete=generated.incomplete;
+       await phase('Generating images with '+(work.provider==='higgsfield'?'Higgsfield':'OpenAI'));
+       const generated=work.provider==='higgsfield'?await generateHiggsfieldImages(work,{env,fetcher,readMedia,downloader:assetDownloader,pollDelay,onPhase:phase,onRequest:requestId=>store.update(s=>{s.jobs.find(j=>j.id===work.id).providerRequestId=requestId;})}):await generateImages(work,{env,fetcher,readMedia});results=generated.images;incomplete=generated.incomplete;
        await store.update(s=>{s.jobs.find(j=>j.id===work.id).providerUsage=generated.usage;});
       }else if(p.kind==='video'){
        results=[await generateVideo(work,{env,fetcher,downloader:assetDownloader,pollDelay,onPhase:phase,onRequest:requestId=>store.update(s=>{s.jobs.find(j=>j.id===work.id).providerRequestId=requestId;})})];
@@ -167,7 +167,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    throw Object.assign(new Error(cloudStarted?'Cloud activation could not be verified. Refresh publishing status; do not activate the same post again blindly.':'The media could not be prepared locally. Your schedule is saved but is not active. Check the saved media and renderer, then try Schedule & activate again.'),{status:503});
   }
  }
- function publicState(){const s=store.read();return {...s,skills,production:{videoModels,fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!higgsfieldCredential(env),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 4 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
+ function publicState(){const s=store.read();return {...s,skills,production:{videoModels,higgsfieldImageModels,fonts:publicFonts(fontCatalog),renderer:renderReady,openai:!!env.OPENAI_API_KEY,higgsfield:!!higgsfieldCredential(env),settings:productionSettings(s.settings.production)},modules:{marketing:enabled.has('marketing'),sniff:false,integration:false},storageMode:store.mode,providerStatus:ready,usage:ledger(s),role:'developer-owner',appVersion,sourceCommit,build:'Phase 4 · v'+appVersion+(sourceCommit?' · '+sourceCommit.slice(0,7):' · source checkout')+' · developer workspace'};}
  async function growthAccount(accountId,brandId){const result=await publishing.accounts();const a=result.accounts.find(a=>a.id===accountId&&a.status==='connected'&&(!brandId||a.brand_id===brandId)&&store.read().brands.some(b=>b.id===a.brand_id));if(!a)fail('Choose a connected account of this brand.',409);return a;}
  async function queueGrowth(b,growth,prompt,title){
   if(!['openai','anthropic'].includes(b.provider)||!ready[b.provider])fail('Configure an OpenAI or Claude text model and key in Settings.',409);
@@ -392,20 +392,21 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
      const b=await jsonBody(req);
      const job=await store.update(s=>{
       const plannerLink=plannerProduction(s,b),production=productionInput(b,s,fontCatalog),config=productionSettings(s.settings.production);
-      if(production.kind==='image')config.imageModel=imageModel(b.imageModel||config.imageModel);
+      const imageOptions=production.kind==='image'?imageGenerationOptions(b,production,config.imageModel):null;
+      if(imageOptions){config.imageModel=imageOptions.model;Object.assign(production,imageOptions);}
       if(production.kind==='video')config.videoModel=videoModel(b.videoModel||config.videoModel).id;
       if(!renderReady&&mediaRenderer===renderAsset)fail('FFmpeg is not configured. Use the complete Windows app or configure FFMPEG locally.',409);
-      if(production.kind==='image'&&(!env.OPENAI_API_KEY||!config.imageModel))fail('Configure OPENAI_API_KEY locally and an image model in Settings.',409);
-      if(production.kind==='video'&&!higgsfieldCredential(env))fail('Add HF_API_KEY (the complete copied Higgsfield API key) to your local API settings, then restart.',409);
+      if(production.kind==='image'&&imageOptions.provider==='openai'&&(!env.OPENAI_API_KEY||!config.imageModel))fail('Configure OPENAI_API_KEY locally and an image model in Settings.',409);
+      if((production.kind==='video'||imageOptions?.provider==='higgsfield')&&!higgsfieldCredential(env))fail('Add HF_API_KEY (the complete copied Higgsfield API key) to your local API settings, then restart.',409);
       if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('The queue is full. Wait for a job to finish.',409);
       const reservation=production.kind==='render'?0:config.reserve*production.count;
       const available=Math.max(0,s.settings.monthlyBudget-ledger(s).committed);
       if(reservation>available)fail('This request needs a US$'+reservation.toFixed(2)+' planning reservation; US$'+available.toFixed(2)+' remains this month. Reduce the batch size, adjust the media reservation in Settings & Costs, or reconcile previous requests in Activity. No generation was started.',409);
-      const j={id:id(),type:'production',...plannerLink,skill:production.kind+'-studio',brandId:production.brandSnapshot.id,title:production.title,production,provider:production.kind==='render'?'local':production.kind==='image'?'openai':'higgsfield',config:{model:production.kind==='render'?'FFmpeg':production.kind==='image'?config.imageModel:config.videoModel},status:'queued',phase:'Waiting for media worker',reservation,costEstimate:null,createdAt:now(),mediaIds:[]};s.jobs.push(j);audit(s,'production.queued',j.id);return j;
+      const j={id:id(),type:'production',...plannerLink,skill:production.kind+'-studio',brandId:production.brandSnapshot.id,title:production.title,production,provider:production.kind==='render'?'local':production.kind==='image'?imageOptions.provider:'higgsfield',config:{model:production.kind==='render'?'FFmpeg':production.kind==='image'?config.imageModel:config.videoModel},status:'queued',phase:'Waiting for media worker',reservation,costEstimate:null,createdAt:now(),mediaIds:[]};s.jobs.push(j);audit(s,'production.queued',j.id);return j;
      });json(res,{id:job.id,status:job.status},202);setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
     }
     if(/^\/api\/production\/[^/]+\/recover$/.test(p)&&req.method==='POST'){
-     await store.update(s=>{const j=s.jobs.find(j=>j.id===p.split('/')[3]&&j.type==='production');if(!j?.providerRequestId||j.production.kind!=='video')fail('There is no recoverable video request.',409);if(['queued','running','completed'].includes(j.status)||j.mediaIds?.length)fail('Request is active or already has saved media. Render the saved source from the studio.',409);if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('Queue is full.',409);j.status='queued';j.phase='Recovering existing Higgsfield request';delete j.error;delete j.finishedAt;audit(s,'production.recover',j.id);});
+     await store.update(s=>{const j=s.jobs.find(j=>j.id===p.split('/')[3]&&j.type==='production');if(!j?.providerRequestId||j.provider!=='higgsfield'||!['image','video'].includes(j.production.kind))fail('There is no recoverable Higgsfield media request.',409);if(['queued','running','completed'].includes(j.status)||j.mediaIds?.length)fail('Request is active or already has saved media. Render the saved source from the studio.',409);if(s.jobs.filter(j=>['queued','running'].includes(j.status)).length>=10)fail('Queue is full.',409);j.status='queued';j.phase='Recovering existing Higgsfield request';delete j.error;delete j.finishedAt;audit(s,'production.recover',j.id);});
      json(res,{ok:true},202);setImmediate(()=>pump().catch(e=>console.error('Queue persistence failure:',e.message)));return;
     }
     if(p==='/api/brand-research'&&req.method==='POST'){
