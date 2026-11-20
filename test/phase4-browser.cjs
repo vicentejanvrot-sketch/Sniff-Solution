@@ -81,6 +81,8 @@ const path=require('node:path');
   assert.equal(videoCalls,1);assert.equal(textCalls,2);assert.equal(app.store.read().jobs.find(j=>j.provider==='higgsfield').config.model,'kling-video/v3.0/pro/text-to-video');
   await page.locator('nav').getByRole('button',{name:'Performance',exact:true}).click();await page.getByRole('button',{name:'Refresh saved results',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#insights-results').textContent.includes('42'));
   assert.ok((await page.locator('#insights-results').textContent()).includes('Unavailable'));await page.getByRole('button',{name:'Request Instagram refresh'}).click();await page.waitForFunction(()=>document.querySelector('#insights-status').textContent.includes('Refresh requested'));assert.equal(syncCalls,1);
+  assert.equal(await page.locator('.insights-filters').evaluate(row=>{const controls=[...row.querySelectorAll('input,select,button')].map(e=>e.getBoundingClientRect());return controls.every(r=>Math.abs(r.top-controls[0].top)<1&&Math.abs(r.bottom-controls[0].bottom)<1);}),true);
+  assert.equal(await page.locator('#insights-results').evaluate(results=>{const cards=[...results.querySelectorAll(':scope > .card')];return cards.length===6&&cards.slice(1).every((card,i)=>Math.abs(card.getBoundingClientRect().top-cards[i].getBoundingClientRect().bottom-15)<1);}),true);
   await page.screenshot({path:path.join(__dirname,'../build/phase4-performance.png'),fullPage:true});
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(__dirname,'../build/phase4-mobile.png'),fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),true,'Mobile page should fit the viewport');
