@@ -159,6 +159,7 @@ const path=require('node:path');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Video Studio must fit mobile');
   await page.locator('nav').getByRole('button',{name:'Image Studio',exact:true}).click();
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Image Studio must fit mobile');
+  await page.getByLabel('Generation provider',{exact:true}).selectOption('higgsfield');await page.locator('#image-model-menu summary').click();assert.ok(await page.locator('#image-model-menu .image-model-choice small').first().isVisible());assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Model menu must fit mobile');await page.locator('#image-model-menu [data-model="kling-image/v4.0/text-to-image"]').click();assert.equal(await page.locator('[name=imageModel]').inputValue(),'kling-image/v4.0/text-to-image');await page.getByLabel('Output format',{exact:true}).selectOption('9:16');assert.match(await page.locator('#image-format-help').textContent(),/Stories/);
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:process.env.SNIFF_PRODUCTION_SCREENSHOT||path.join(dir,'image-studio.png'),fullPage:true});
   await page.locator('nav').getByRole('button',{name:'Workspace',exact:true}).click();
