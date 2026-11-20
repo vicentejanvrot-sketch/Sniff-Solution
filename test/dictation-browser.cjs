@@ -29,6 +29,7 @@ const path=require('node:path');
   assert.equal(await page.getByLabel('Campaign goal and context',{exact:true}).inputValue(),'Christmas promotion. Describe our holiday offers.');
   // Switching fields stops the previous recognizer and targets the correct repeated form.
   const days=page.locator('[data-entry-form]'),second=days.nth(1);
+  await page.locator('[data-plan-day] > summary').nth(1).click();
   await second.getByRole('button',{name:'Dictate Creative brief — sent to the media provider',exact:true}).click();await speak('Show a sunny destination.');
   assert.equal(await days.first().locator('[name=prompt]').inputValue(),'Typed brief.');assert.equal(await second.locator('[name=prompt]').inputValue(),'Typed brief. Show a sunny destination.');
   await second.getByRole('button',{name:'Dictate Instagram caption — posted with this media',exact:true}).click();await speak('Save your next trip idea.');
