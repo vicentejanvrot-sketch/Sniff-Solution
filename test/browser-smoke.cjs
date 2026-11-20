@@ -105,6 +105,7 @@ const path=require('node:path');
   await pickStudio('sourceId',source.id);
   assert.equal(await page.locator('#image-studio-select-sourceId-validation').isVisible(),false);
   await pickStudio('aspect','4:5');
+  assert.ok(await page.locator('[data-for=aspect] summary svg rect').evaluate(r=>Number(r.getAttribute('height'))>Number(r.getAttribute('width'))));
   await page.getByLabel('Apply approved brand overlays',{exact:true}).check();
   await pickStudio('logoId',source.id);
   if(process.platform==='win32'){

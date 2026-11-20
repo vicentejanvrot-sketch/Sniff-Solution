@@ -1,3 +1,12 @@
+// The frame outline uses the actual width-to-height ratio, independent of output resolution.
+function ratioIcon(value){
+ const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('class','studio-ratio-icon');svg.setAttribute('viewBox','0 0 26 26');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
+ const auto=value==='auto',ratio=/^(\d+):(\d+)$/.exec(value);if(!auto&&!ratio)return null;
+ const shape=document.createElementNS(ns,auto?'path':'rect');shape.setAttribute('fill','none');shape.setAttribute('stroke','currentColor');shape.setAttribute('stroke-width','1.6');shape.setAttribute('stroke-linecap','round');shape.setAttribute('stroke-linejoin','round');
+ if(auto)shape.setAttribute('d','M3 9V3h6 M17 3h6v6 M23 17v6h-6 M9 23H3v-6');
+ else{const w=Number(ratio[1]),h=Number(ratio[2]),scale=22/Math.max(w,h),width=w*scale,height=h*scale;for(const [key,n] of Object.entries({x:(26-width)/2,y:(26-height)/2,width,height,rx:2}))shape.setAttribute(key,String(n));}
+ svg.append(shape);return svg;
+}
 // Image Studio only: keep native form values and validation, present accessible rich dropdowns.
 export function enhanceImageStudioControls(form){
  form.classList.add('modern-image-studio');
@@ -16,6 +25,8 @@ export function enhanceImageStudioControls(form){
   menu.innerHTML='<summary><span class="studio-select-value"></span></summary><div class="image-model-list studio-select-list"><input class="studio-select-search" type="search" placeholder="Search options…" aria-label="Search options" hidden><div class="studio-select-options" role="group"></div></div>';
   select.after(menu);select.classList.add('studio-native-select');select.tabIndex=-1;select.setAttribute('aria-hidden','true');
   const summary=menu.querySelector('summary'),value=menu.querySelector('.studio-select-value'),search=menu.querySelector('input'),list=menu.querySelector('.studio-select-options');
+  const ratioField=['imageAspect','aspect'].includes(select.name);
+  function drawLabel(target,text,optionValue){target.replaceChildren();if(ratioField){const icon=ratioIcon(optionValue);if(icon)target.append(icon);target.classList.add('studio-ratio-label');}const caption=document.createElement('span');caption.textContent=text;target.append(caption);}
   const validation=document.createElement('p');validation.className='studio-select-validation';validation.id=select.id+'-validation';validation.setAttribute('role','alert');validation.hidden=true;menu.after(validation);summary.setAttribute('aria-describedby',validation.id);
   list.setAttribute('aria-label',label+' options');
   function close(){menu.open=false;search.value='';}
@@ -29,13 +40,13 @@ export function enhanceImageStudioControls(form){
     }
     previousGroup=group;
     const button=document.createElement('button');button.type='button';button.className='image-model-choice studio-select-choice';button.dataset.value=option.value;button.disabled=option.disabled||!!group?.disabled;button.setAttribute('aria-pressed',String(option.selected));
-    const name=document.createElement('strong');name.textContent=option.textContent;button.append(name);const description=descriptions[select.name]?.[option.value];if(description){const detail=document.createElement('small');detail.textContent=description;button.append(detail);}list.append(button);
+    const name=document.createElement('strong');drawLabel(name,option.textContent,option.value);button.append(name);const description=descriptions[select.name]?.[option.value];if(description){const detail=document.createElement('small');detail.textContent=description;button.append(detail);}list.append(button);
     button.addEventListener('click',()=>{if(select.disabled||button.disabled)return;select.value=option.value;close();summary.focus();select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('change',{bubbles:true}));sync();});
    }
    if(!list.querySelector('button')){const empty=document.createElement('p');empty.className='hint studio-select-empty';empty.textContent='No matching options.';list.append(empty);}
   }
   function sync(){
-   const name=select.selectedOptions[0]?.textContent||'Choose an option';value.textContent=name;summary.setAttribute('aria-label','Choose '+label+': '+name);menu.hidden=select.hidden;menu.classList.toggle('studio-select-disabled',select.disabled);
+   const name=select.selectedOptions[0]?.textContent||'Choose an option';drawLabel(value,name,select.value);summary.setAttribute('aria-label','Choose '+label+': '+name);menu.hidden=select.hidden;menu.classList.toggle('studio-select-disabled',select.disabled);
    summary.setAttribute('aria-disabled',String(select.disabled));summary.tabIndex=select.disabled?-1:0;
    if(select.validity.valid||select.disabled){validation.hidden=true;summary.removeAttribute('aria-invalid');}
    if(select.disabled||select.hidden)close();search.hidden=select.options.length<9;if(menu.open)drawOptions();
