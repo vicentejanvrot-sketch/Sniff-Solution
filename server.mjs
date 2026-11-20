@@ -587,6 +587,7 @@ export async function createApp({env=process.env,dir=env.DATA_DIR||'.data',fetch
    staticFiles['/calendar.js']=['calendar.js','text/javascript; charset=utf-8'];
    staticFiles['/social.js']=['social.js','text/javascript; charset=utf-8'];
    staticFiles['/production.js']=['production.js','text/javascript; charset=utf-8'];
+   staticFiles['/image-studio-controls.js']=['image-studio-controls.js','text/javascript; charset=utf-8'];
    staticFiles['/dictation.js']=['dictation.js','text/javascript; charset=utf-8'];
    staticFiles['/thumbnails.js']=['thumbnails.js','text/javascript; charset=utf-8'];
    staticFiles['/timing.js']=['timing.js','text/javascript; charset=utf-8'];

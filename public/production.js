@@ -1,6 +1,7 @@
 import {videoBriefHTML,bindVideoBrief} from './video-brief.js';
 // The studio uses the existing owner's workspace, API boundary and persistent queue.
 import {bindDictation,dictationControls,stopDictation} from './dictation.js';
+import {enhanceImageStudioControls} from './image-studio-controls.js';
 export function visibleMedia(items,showOriginals=false){const sources=new Set(items.filter(m=>m.role==='rendered').map(m=>m.sourceId));return items.filter(m=>showOriginals||m.role!=='generated'||!sources.has(m.id));}
 export function mountStudio(el,ctx){
  const {state,kind,activeBrand,esc,heading,brandOptions,send,api,refresh,navigate,toast,money,preview,plannerSelection}=ctx;
@@ -84,4 +85,5 @@ export function mountStudio(el,ctx){
  form.onsubmit=async e=>{e.preventDefault();if(estimate())return;const button=e.submitter;stopDictation();button.disabled=true;el.querySelector('#production-error').textContent='';try{if(video&&form.elements.kind.value==='video'&&await videoPlanner.prepareIfNeeded())return;const b=Object.fromEntries(new FormData(form));if(plannerLink){Object.assign(b,plannerLink);for(const name of ['brandId','aspect','kind',...(video?['duration']:[])])b[name]=form.elements[name].value;}if(video&&b.kind==='video')Object.assign(b,videoPlanner.values());delete b.preparedPrompt;delete b.briefProvider;if(!b.color)delete b.color;b.branding=form.elements.branding.checked;b.includeBrandText=form.elements.includeBrandText.checked;b.transparent=!!form.elements.transparent?.checked;await send('/api/production','POST',b);await refresh();navigate('jobs');toast('Production queued. Keep Sniff running while it works.');}catch(err){el.querySelector('#production-error').textContent=err.message;toast(err.message,true);}finally{estimate();}};
  el.querySelector('#open-production-media').onclick=()=>navigate('media');el.querySelector('#refresh-productions').onclick=async()=>{await refresh();navigate(video?'video':'images');};
  el.querySelectorAll('[data-production-preview]').forEach(b=>b.onclick=()=>preview(state.media.find(m=>m.id===b.dataset.productionPreview)));
+ if(!video)enhanceImageStudioControls(form);
 }
