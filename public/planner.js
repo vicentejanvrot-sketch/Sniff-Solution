@@ -47,7 +47,7 @@ export function mountPlanner(el,{state,activeBrand,esc,heading,send,api,refresh:
    form.querySelector('[data-schedule]').onclick=()=>scheduleDay(plan,entry,form);
    form.addEventListener('input',updateBatch);form.elements.mediaId.onchange=updateBatch;form.elements.accountId.onchange=updateBatch;
    form.querySelectorAll('[data-preview]').forEach(b=>b.onclick=()=>preview(state.media.find(m=>m.id===b.dataset.preview)));
-   if(locked)form.querySelectorAll('textarea,input,button[data-prepare],button[type=submit],button[data-produce]').forEach(x=>x.disabled=true);
+   if(locked){form.dataset.dictationLockReason=schedule(entry)?'This day has a saved publication. Dictation is available on editable posting days.':'A request is in progress. Refresh results when it finishes to edit or dictate.';form.querySelectorAll('textarea,input,button[data-prepare],button[type=submit],button[data-produce]').forEach(x=>x.disabled=true);}
    const saved=schedule(entry);form.querySelector('[data-schedule]').disabled=publishingBusy||busy(entry)||entry.status!=='approved'||!!(saved&&(saved.activationState==='active'||saved.status!=='scheduled'));
   });
   updateBatch();

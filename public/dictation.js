@@ -1,6 +1,7 @@
 let active=null;
 const bound=new WeakMap(),controls=new WeakMap(),targets=new WeakMap();
 const writable=field=>field?.isConnected&&!field.readOnly&&!field.matches(':disabled')&&!field.closest('dialog:not([open])')&&!field.closest('[hidden]');
+const available=field=>writable(field)&&!field.closest('details:not([open])');
 export function stopDictation(){if(active){const current=active;active=null;try{current.recognition.abort();}catch{}current.finish();}}
 export function dictationControls(name,label){return '<div class="dictation-controls"><button type="button" data-dictate="'+name+'" aria-label="Dictate '+label+'" aria-pressed="false">🎙 Dictate</button><span data-dictation-status="'+name+'" class="hint" role="status" aria-live="polite"></span></div>';}
 export function bindDictation(root){
@@ -13,7 +14,7 @@ export function bindDictation(root){
   bound.set(button,field);controls.set(field,button.parentElement);
   if(!Speech){button.disabled=true;status.textContent='Browser dictation unavailable. On Windows, focus this field and press Win+H to use voice typing.';continue;}
   button.onclick=()=>{
-   if(!writable(field))return;
+   if(!available(field))return;
    if(active?.button===button){button.disabled=true;status.textContent='Finishing dictation…';try{active.recognition.stop();}catch{stopDictation();}return;}
    stopDictation();
    const recognition=new Speech(),seen=new Set();let message='Dictation stopped. Review the text before using it.';
@@ -23,7 +24,7 @@ export function bindDictation(root){
    button.textContent='Stop dictation';button.setAttribute('aria-pressed','true');status.textContent='Starting microphone…';
    recognition.onstart=()=>{if(active===session)status.textContent='Listening… Speak, then select Stop dictation.';};
    recognition.onresult=event=>{
-    if(active!==session)return;if(!writable(field)){stopDictation();return;}let interim='';
+    if(active!==session)return;if(!available(field)){stopDictation();return;}let interim='';
     for(let i=event.resultIndex;i<event.results.length;i++){
      const result=event.results[i],text=result[0]?.transcript?.trim()||'';
      if(result.isFinal&&!seen.has(i)){seen.add(i);const next=field.value+(field.value&&!/\s$/.test(field.value)?' ':'')+text;field.value=next.slice(0,field.maxLength>0?field.maxLength:30000);field.dispatchEvent(new Event('input',{bubbles:true}));if(field.value.length<next.length){message='Field length limit reached. Review the text.';try{recognition.stop();}catch{stopDictation();}return;}}
@@ -44,8 +45,9 @@ export function observeDictation(root){
  function scan(){
   bindDictation(root);
   for(const field of root.querySelectorAll('textarea')){
+   const plannerField=!!field.closest('[data-entry-form]');
    let row=controls.get(field);
-   if(!row&&!field.readOnly&&!field.matches(':disabled')){
+   if(!row&&(plannerField||(!field.readOnly&&!field.matches(':disabled')))){
     row=document.createElement('div');row.className='dictation-controls';
     const button=document.createElement('button'),status=document.createElement('span');
     const label=field.labels?.[0]?.cloneNode(true);label?.querySelectorAll('textarea,input,select,button').forEach(n=>n.remove());
@@ -59,9 +61,18 @@ export function observeDictation(root){
     targets.set(button,field);
     bindDictation(field.form||root);
    }
-   if(row){const hidden=!writable(field);if(row.hidden!==hidden)row.hidden=hidden;}
+   if(row){
+    const locked=!writable(field);
+    if(plannerField){
+     const button=row.querySelector('[data-dictate]'),status=row.querySelector('[data-dictation-status]');
+     if(locked){if(active?.button===button)stopDictation();if(!button.disabled)button.disabled=true;if(row.dataset.locked!=='true'){row.dataset.locked='true';status.textContent=field.form?.dataset.dictationLockReason||'Dictation is unavailable while this posting day is locked for editing.';}}
+     else if(row.dataset.locked==='true'){delete row.dataset.locked;const supported=!!(globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition);button.disabled=!supported;status.textContent=supported?'':'Browser dictation unavailable. On Windows, focus this field and press Win+H to use voice typing.';}
+     if(row.hidden)row.hidden=false;
+     const hint=row.querySelector('small');if(hint&&hint.hidden!==locked)hint.hidden=locked;
+    }else if(row.hidden!==locked)row.hidden=locked;
+   }
   }
-  if(active&&(!writable(bound.get(active.button))||!active.button.isConnected||active.button.closest('[hidden]')||root.querySelector('dialog[open]')&&!active.button.closest('dialog[open]')))stopDictation();
+  if(active&&(!available(bound.get(active.button))||!active.button.isConnected||active.button.closest('[hidden]')||root.querySelector('dialog[open]')&&!active.button.closest('dialog[open]')))stopDictation();
  }
  const observer=new MutationObserver(scan);
  observer.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['readonly','disabled','open','hidden']});

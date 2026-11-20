@@ -30,10 +30,18 @@ const path=require('node:path');
   // Switching fields stops the previous recognizer and targets the correct repeated form.
   const days=page.locator('[data-entry-form]'),second=days.nth(1);
   await page.locator('[data-plan-day] > summary').nth(1).click();
+  for(const name of ['purpose','prompt','caption']){const control=second.locator('[data-dictate='+name+']');assert.equal(await control.isVisible(),true);assert.equal(await control.isEnabled(),true);}
+  await second.locator('[data-dictate=purpose]').click();await speak('Keep it authentic.');
+  const collapsedAborts=await page.evaluate(()=>window.speechAborts);await page.locator('[data-plan-day] > summary').nth(1).click();
+  await page.waitForFunction(n=>window.speechAborts>n,collapsedAborts);await speak('This must not be inserted.');
+  assert.equal(await second.locator('[name=purpose]').inputValue(),'A useful scene Keep it authentic.');
+  await page.locator('[data-plan-day] > summary').nth(1).click();
   await second.getByRole('button',{name:'Dictate Creative brief — sent to the media provider',exact:true}).click();await speak('Show a sunny destination.');
   assert.equal(await days.first().locator('[name=prompt]').inputValue(),'Typed brief.');assert.equal(await second.locator('[name=prompt]').inputValue(),'Typed brief. Show a sunny destination.');
   await second.getByRole('button',{name:'Dictate Instagram caption — posted with this media',exact:true}).click();await speak('Save your next trip idea.');
   assert.equal(await second.locator('[name=caption]').inputValue(),'Typed caption. Save your next trip idea.');
+  await second.getByRole('button',{name:'Save for review',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('saved for review'));
+  assert.equal(app.store.read().contentPlans[0].entries[1].caption,'Typed caption. Save your next trip idea.');
   await second.getByRole('button',{name:'Dictate Purpose and creative assumptions',exact:true}).click();await speak('x'.repeat(2000));assert.equal((await second.locator('[name=purpose]').inputValue()).length,1500);
   await second.getByRole('button',{name:'Dictate Instagram caption — posted with this media',exact:true}).click();
   await page.evaluate(()=>window.testRecognition.onerror({error:'not-allowed'}));assert.ok((await second.locator('[data-dictation-status=caption]').textContent()).includes('denied'));
